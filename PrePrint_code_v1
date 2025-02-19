@@ -1,0 +1,2724 @@
+## look for evidence that common variants in genes that cause monogenic liver disease also affect severity of common liver diseases 
+
+setwd("~/MonoGen_LivDis")
+
+load("~~/MonoGen_LivDis/Monogen_Feb25.RData")
+
+tempdir <- paste(Sys.getenv("HOME"), "R/tmp", sep = "/")
+#dir.create(tempdir, recursive = TRUE)
+Sys.setenv(TMPDIR = tempdir)
+libdir <- paste(Sys.getenv('HOME'), "R/library", getRversion(), Sys.getenv('BB_APPS_BASE'), sep = "/")
+.libPaths(c(libdir, .libPaths()))
+options(bitmapType='cairo')
+#Sys.setenv(TMPDIR = "rds/projects/g/greaslcm-bear-apps/app_testing/rstudio")
+file_path <- file.path(Sys.getenv("TMPDIR"), "example_file.txt")
+
+## installations (my standard set of packages)
+# library(ggplot2)
+# library(ggpubr)
+# library(ggbeeswarm)
+# library(dplyr)
+# library(readxl)
+# library(cowplot)
+# library(ggsignif)
+# library(rstatix)
+# library(stringr)
+# library(reshape2)
+# library(tidyverse)
+# library(readxl)
+# library(corrplot)
+# library(tidyr)
+# library(factoextra)
+# library(FactoMineR)
+# library(paran)
+# library(cowplot)
+# library(ggplotify)
+# library(grid)
+# library(dplyr)
+# library(ggplot2)
+# library(ggrepel)
+# library(Hmisc)
+# library(ggbiplot)
+# library(rstatix)
+# library(gtools)
+# library(devtools)
+# library(phenoscanner)
+# library(ggpubr)
+# library(readxl)
+# library(ggplot2)
+# library(dplyr)
+# library(ggpubr)
+# library(ggsignif)
+# library(rstatix)
+# library(stringr)
+# library(reshape2)
+# library(cowplot)
+#BiocManager::install("Qtlizer")
+library(ieugwasr)
+
+library(fs)
+library(data.table)
+library(tidyverse)
+library(pheatmap)
+require(viridis)
+#install.packages("LDlinkR")
+#library(LDlinkR)
+
+## manually derive list of monogenic disorders / genes
+MonoGen_genes <- list("ABCB11", "ABCB4", "ABCC2", "AGL", "AHI1", "AKR1D1", "ALDOB", "AMACR", "ARG1", "ARSB", "ASL", "ASS1", "ATP7B", "ATP8B1", "BAAT", "BCS1L", "CC2D2A", "CLDN1", "CYP27A1", "CYP7B1", "DGUOK", "EIF2AK3", "FADD", "FAH", "G6PC", "GALE", "GALK1", "GALM", "GALT", "GBA", "GBE1", "GFM1", "HAMP", "HFE", "HJV", "HMBS", "HSD3B7", "JAG1", "LARS1", "LIPA", "MARS1", "MPI", "MPV17", "NBAS", "NOTCH2", "NPC1", "OTC", "PEX1", "PKHD1", "PNPLA3", "POLG1", "PRKCSH", "SEC63", "ALG8", "LRP5", "RINT1", "RPGRIP1L", "SCO1", "SERPINA1", "SLC10A2", "SLC51B", "SLC25A13", "SLC40A1", "SMPD1", "SUCLG1", "TFR2", "TJP2", "TMEM67", "TRMU", "TUFM", "TWNK", "UGT1A1", "UTP4", "VPS33B", "SC5D", "CFTR", "ADK", "COG7", "DCDC2", "HADHA", "HNF1B", "KIF12", "MVK", "MYO5B", "NPC2", "NR1H4", "PEX12", "PEX26", "PEX6", "TALDO1", "UNC45A", "USP53", "VIPAS39", "YARS", "ZFYVE19", "DNAJB11", "GANAB", "PKD1", "PKD2")
+# PNPLA3 included as 'positive' control
+
+## transcript and gene IDs obtained from ensembl biomart
+MonoGene_genes_data <- fread("~/Other/MonoGene_genes_data.txt")
+
+##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  ##### ---- Gene-level analyses
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  
+##### ---- 
+
+##### ---- 
+##### ---- 
+##### ---- HuGe Gene-trait scores
+##### ---- 
+##### ---- 
+## [This gives an overall score for the evidence of association between a traits and genes]
+
+
+## Download HuGe scores for phenotypes for each gene https://hugeamp.org/
+## Input gene into search bar then search by 'gene' and then download the csv for 'HuGE Scores'
+
+## Merge all results into a single data table
+
+# List all of the HuGE_Scores files within the HuGE_Scores folder from the directory 
+huge_scores_files <- dir_ls("~/HuGe_Scores")
+
+# Create a function to read and process each file
+read_and_process <- function(path) {
+    df <- read_csv(path)
+    df$range <- factor(df$range, levels = c("No Evidence", "Anecdotal", "Moderate", "Strong", "Very Strong", "Compelling"))
+    df$chromosome <- as.character(df$chromosome)
+    return(df)
+}
+
+# Use map to apply the function to each file and store the results in a list
+huge_scores_data <- map(huge_scores_files, read_and_process)
+
+huge_scores <- bind_rows(huge_scores_data)
+huge_scores <- huge_scores %>% filter(gene %in% MonoGen_genes)
+## [Calling chromosome X=23 for OTC to facilitate binding rows}
+huge_scores$gene_trait <- paste(huge_scores$gene, huge_scores$phenotype, sep="_")
+huge_scores$group <- as.factor(huge_scores$group)
+
+# Filter for liver-related traits
+# Create summary figure: heatmap with genes as rows and traits as columns, encoding renderScore by colour
+huge_hep <- filter(huge_scores, group == "HEPATIC")
+row.names(huge_hep) <- huge_hep$gene_trait
+huge_hep_hmtab <- subset(huge_hep, select = c("gene", "phenotype", "renderScore"))
+huge_hep_hmtab <- pivot_wider(huge_hep_hmtab, names_from = phenotype, values_from = renderScore, values_fill = NA)
+huge_hep_hmtab$sum <- rowSums(huge_hep_hmtab[, 2:ncol(huge_hep_hmtab)], na.rm = TRUE)
+huge_hep_hmtab = subset(huge_hep_hmtab, sum >3)
+huge_hep_hmtab = subset(huge_hep_hmtab, gene !="PNPLA3")
+huge_hep_hm_rows <- huge_hep_hmtab$gene
+huge_hep_hmtab <- huge_hep_hmtab %>% arrange(gene)
+huge_hep_hmtab <- subset(huge_hep_hmtab, select = -c(gene, sum))
+huge_hep_hmtab <- subset(huge_hep_hmtab, select = -c(PBC, LiverIron, PSC, liverT1time, LPDFF, Liver_volume))
+huge_hep_hmtab <- huge_hep_hmtab[, colSums(huge_hep_hmtab) != 0]
+huge_hep_hm_cols <- names(huge_hep_hmtab)
+huge_hep_hm_cols <- c("ALP", "ALT", "GGT", "AST", "AST:ALT ratio", "Total bilirubin", "Cirrhosis", "NAFLD", "Albumin", "Direct Bilirubin")
+
+# create annotation with level of evidence
+huge_hm_annot <- subset(huge_hep, select = c("gene", "phenotype", "range"))
+huge_hm_annot <- pivot_wider(huge_hm_annot, names_from = phenotype, values_from = range, values_fill = NA)
+huge_hm_annot <- huge_hm_annot[huge_hm_annot$gene %in% huge_hep_hm_rows, ]
+huge_hm_annot <- huge_hm_annot %>% arrange(gene)
+huge_hm_annot <- subset(huge_hm_annot, select = -c(NAFLDfibrosis, LiverAge, gene, LiverFat, NAFLDscore, PBC, LiverIron, PSC, liverT1time, LPDFF, Liver_volume))
+annotation_symbols <- c("", ".", "*", "**", "***", "****")
+huge_hm_annot <- huge_hm_annot %>% mutate_all(factor, levels = c("No Evidence", "Anecdotal", "Moderate", "Strong", "Very Strong", "Compelling"), labels = annotation_symbols)
+huge_hm_annot <- huge_hm_annot %>% mutate_all(~ replace(., is.na(.), ""))
+
+
+pdf("huge_pheatmap.pdf", width = 6, height = 6)
+huge_pheatmap <- pheatmap(huge_hep_hmtab, labels_col= huge_hep_hm_cols, angle_col = 45, legend_labels = c("0", "2", "4", "6", "8", "10", "12"), legend_breaks = seq(0, 12, 2), fontsize_legend = 8, scale = "none", treeheight_row = 10, treeheight_col = 10, labels_row= huge_hep_hm_rows, display_numbers = huge_hm_annot)
+dev.off()
+
+
+# Filter for other traits
+# Create summary figure: heatmap with genes as rows and traits as columns, encoding renderScore by colour
+huge_other <- filter(huge_scores, group == "GLYCEMIC" | group == "CARDIOVACSULAR" | group == "STROKE" | group == "LIPIDS" | group == "METABOLITE" | group == "RENAL")
+huge_other = subset(huge_other, gene !="PNPLA3")
+huge_other_hmtab <- subset(huge_other, select = c("gene", "phenotype", "renderScore"))
+huge_other_hmtab <- pivot_wider(huge_other_hmtab, names_from = phenotype, values_from = renderScore, values_fill = NA)
+huge_other_hmtab <- huge_other_hmtab %>% select_if(~ !any(is.na(.)))
+column_sums <- colSums(huge_other_hmtab[, -1])  # Exclude the 'gene' column
+selected_columns <- names(column_sums[column_sums >= 10]) # Get the names of columns where the sum is >= 10
+selected_columns <- c("gene", selected_columns) # Include the 'gene' column in the selected columns
+huge_other_hmtab <- huge_other_hmtab[, selected_columns] # Subset the data frame to include only the selected columns
+huge_other_hmtab$row_sum <- rowSums(huge_other_hmtab[, 2:ncol(huge_other_hmtab)])
+huge_other_hmtab = subset(huge_other_hmtab, row_sum >3)
+huge_other_hm_rows <- huge_other_hmtab$gene
+huge_other_hmtab <- huge_other_hmtab %>% arrange(gene)
+huge_other_hmtab <- subset(huge_other_hmtab, select = -c(gene, row_sum, nonHDL, TGnonT2D, eGFRcys, FIadjBMI, HBA1CadjBMI, BS, eGFRcrea, IA, CKD, UA))
+huge_other_hmtab <- huge_other_hmtab[, colSums(huge_other_hmtab) != 0]
+huge_other_hm_cols <- names(huge_other_hmtab)
+huge_other_hm_cols_lab <- c("ApoB", "Cholesterol", "HDL", "LDL", "HbA1c", "ApoA", "Triglycerides", "Urate", "Creatinine", "Fasting glucose", "Haemorrhagic stroke", "T2DM", "Urea", "T2DM adjBMI", "Phosphate", "Cystatin C", "Calcium")
+
+# create annotation with level of evidence
+huge_other_annot <- subset(huge_other, select = c("gene", "phenotype", "range"))
+huge_other_annot <- pivot_wider(huge_other_annot, names_from = phenotype, values_from = range)
+huge_other_annot <- huge_other_annot %>% mutate_all(as.character)
+huge_other_annot <- huge_other_annot[huge_other_annot$gene %in% huge_other_hm_rows, ]
+huge_other_annot <- huge_other_annot %>% arrange(gene)
+huge_other_annot <- subset(huge_other_annot, select = c(names(huge_other_hmtab)))
+annotation_symbols <- c("", ".", "*", "**", "***", "****", "*****")
+huge_other_annot <- huge_other_annot %>% mutate_all(factor, levels = c("No Evidence", "Anecdotal", "Moderate", "Strong", "Very Strong", "Compelling", "Extreme"), labels = annotation_symbols)
+huge_other_annot <- huge_other_annot %>% mutate_all(~ replace(., is.na(.), ""))
+
+
+pdf("huge_other_pheatmap.pdf", width = 8, height = 8)
+huge_other_pheatmap <- pheatmap::pheatmap(huge_other_hmtab, labels_col= huge_other_hm_cols_lab, angle_col = 45, legend_labels = c("0", "2", "4", "6", "8", "10", "12"), legend_breaks = seq(0, 12, 2), fontsize_legend = 8, scale = "none", treeheight_row = 20, treeheight_col = 10, labels_row= huge_other_hm_rows, display_numbers = huge_other_annot, fontsize_row = 8)
+dev.off()
+
+
+##
+## make a summary table of Huge gene scores
+##
+huge_phenos <- filter(huge_scores, group == "GLYCEMIC" | group == "CARDIOVACSULAR" | group == "STROKE" | group == "LIPIDS" | group == "METABOLITE" | group == "RENAL" | group == "HEPATIC" | range == "Compelling"| range == "Very Strong"| range == "Extreme")
+fwrite(huge_phenos, "huge_phenos.txt", sep="\t")
+huge_phenos_filt <- fread("~/MonogenLiveR/huge_phenos_filt.txt")
+huge_sumtab <- huge_scores[huge_scores$phenotype %in% huge_phenos_filt$phenotype, ]
+huge_sumtab$region <- paste(huge_sumtab$chromosome, huge_sumtab$start, sep = "_")
+huge_sumtab$region <- paste(huge_sumtab$region, huge_sumtab$end, sep = "_")
+huge_sumtab$renderScore <- round(huge_sumtab$renderScore, digits=1)
+huge_sumtab$Evidence <- paste(huge_sumtab$range, huge_sumtab$renderScore, sep = " (")
+huge_sumtab$Evidence <- paste(huge_sumtab$Evidence, "", sep = ")")
+huge_sumtab <- huge_sumtab %>% arrange(gene, group, phenotype)
+huge_sumtab = subset(huge_sumtab, select=c(gene, region, phenotype, Evidence))
+huge_sumtab <- pivot_wider(huge_sumtab, names_from = phenotype, values_from = Evidence, values_fill = NA)
+huge_sumtab <- huge_sumtab %>% mutate(across(everything(), ~ gsub("NA \\(0\\)", "", .)))
+fwrite(huge_sumtab, "huge_sumtab.txt", sep="\t")
+
+##### ---- 
+##### ---- ##### ---- make a stacked barchart of huge gene evidence summaries
+##### ---- 
+library(viridis)
+library(forcats)
+
+huge_barchart_tab <- huge_scores[huge_scores$phenotype %in% huge_phenos_filt$phenotype, ]
+huge_barchart_tab = subset(huge_barchart_tab, select=c(gene, phenotype, range))
+huge_barchart_tab <- filter(
+  huge_barchart_tab,
+  phenotype != "LiverAge" & phenotype != "NAFLDfibrosis" & phenotype != "LiverFat" & 
+  phenotype != "NAFLDscore" & gene != "PNPLA3" & phenotype != "NAFLD" & 
+  phenotype != "WHR" & phenotype != "NeutCount" & phenotype != "LymphoCount" & 
+  phenotype != "MonoCount" & phenotype != "WBC")
+
+
+
+
+
+# Filter out rows with NA in 'range' and calculate the percentage within each phenotype
+huge_barchart_perc <- huge_barchart_tab %>%
+  filter(!is.na(range)) %>%
+  group_by(phenotype) %>%
+  mutate(total = n()) %>%
+  group_by(phenotype, range) %>%
+  summarise(count = n(), total = first(total), .groups = 'drop') %>%
+  mutate(percentage = (count / total) * 100) %>%
+  mutate(range = fct_rev(range))
+
+# Arrange x-axis by descending percentage of range == "No Evidence"
+phenotype_order <- huge_barchart_perc %>%
+  filter(range == "No Evidence") %>%
+  arrange(desc(percentage)) %>%
+  pull(phenotype)
+
+# Apply the new order to phenotype
+huge_barchart_perc <- huge_barchart_perc %>%
+  mutate(phenotype = factor(phenotype, levels = phenotype_order))
+
+huge_barchart_perc <- huge_barchart_perc %>% mutate(phenotype = recode(phenotype, "DirectBilirubin" = "Direct bilirubin", "SerumUrea" = "Serum urea", "CAD" = "Coronary artery \n disease", "AST_ALT_ratio" = "AST:ALT ratio", "BILIRUBIN" = "Bilirubin", "T2D"  = "T2DM", "Alb" = "Albumin", "HYPERTENSION" = "Hypertension", "HBA1C" = "HbA1c", "CystatinC" = "Cystatin C", "PlatCount" = "Platelet count", "CHOL" = "Total cholesterol"))
+
+pdf("huge_barchart.pdf", width = 16, height = 8)
+ggplot(huge_barchart_perc, aes(x = phenotype, y = percentage, fill = range)) +
+  geom_bar(stat = "identity") +
+  labs(x = "", y = "Percentage of genes", fill = "Level of evidence") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), expand=c(0,0)) +
+  coord_cartesian(ylim = c(25, 100)) +  
+  theme_minimal() +
+  scale_fill_viridis_d(option = "plasma") + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+dev.off()
+
+
+##### ---- 
+##### ---- ##### ---- make a pie chart showing proportion of all gene with at least strong evidence in liver-related traits
+##### ---- 
+
+huge_hep <- huge_hep %>% mutate(range_grouped = if_else(range %in% c("Compelling", "Very Strong", "Strong", "Moderate"), 1, 0))
+huge_hep_counts <- huge_hep %>% group_by(gene) %>% summarise(total_yes = sum(range_grouped))
+huge_hep_counts = subset(huge_hep_counts, gene !="PNPLA3")
+
+grouped_counts <- huge_hep_counts %>% group_by(total_yes) %>% summarise(num_genes = n())
+grouped_counts <- grouped_counts %>% arrange(desc(total_yes))
+pie_colors <- viridis(option = "plasma", n = nrow(grouped_counts))
+pie_labels <- paste(grouped_counts$total_yes, "traits")
+huge_pie <- pie(grouped_counts$num_genes, labels = pie_labels, col = pie_colors, border = NA, init.angle = 300)
+huge_pie
+
+
+#using ggplot2:
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(viridis)
+
+# Group and summarize data
+grouped_counts <- huge_hep_counts %>% group_by(total_yes) %>% summarise(num_genes = n()) %>%  arrange(desc(total_yes))
+
+# make table
+grouped_counts <- grouped_counts %>%  mutate(percentage = num_genes / sum(num_genes) * 100, ypos = cumsum(percentage) - 0.5 * percentage)
+
+# Create the pie chart with reversed colors and conditional text color
+huge_pie2 <- ggplot(grouped_counts, aes(x = "", y = num_genes, fill = factor(total_yes))) +
+  geom_bar(width = 1, stat = "identity", color = "white") + # Create pie chart
+  coord_polar(theta = "y", start = 0) +  # Convert to polar coordinates
+  theme_void() +  # Remove axes and grid
+  scale_fill_viridis_d(option = "plasma", direction = -1) +  # Reverse the Viridis color palette
+  geom_label_repel(aes(y = ypos, label = paste(total_yes, "traits, ", num_genes, "genes")),
+                   nudge_x = 0.5,  # Nudge the labels to the right
+                   show.legend = FALSE,  # Don't show labels in the legend
+                   size = 4,
+                   color = ifelse(grouped_counts$total_yes >= 4, "white", "black"), segment.color = "black") + theme(legend.position="none")
+
+pdf("huge_pie.pdf", width = 8, height = 8)
+huge_pie2
+dev.off()
+
+
+
+##### ---- 
+##### ---- 
+##### ---- GeneBass gene-based burden testing
+##### ---- 
+##### ---- 
+
+## get data from genebass for gene-level testing
+
+## missense
+missense_files <- dir_ls("~/GeneBass_burden/Modified_Missense_Burden_Tests")
+# Create a function to read and process each file
+read_and_process <- function(path) {
+    df <- read_csv(path, col_types = cols(Sex = col_character(), Info = col_character(), Beta = col_double(), "N cases"= col_double(), "N controls"= col_double(), "...13" = col_character()))
+    return(df)
+}
+# Use map to apply the function to each file and store the results in a list
+missense_list <- map(missense_files, read_and_process)
+missense_data <- bind_rows(missense_list)
+missense_data <- missense_data %>% filter(Gene %in% MonoGen_genes)
+names(missense_data)[names(missense_data) == "P-Value (SKAT-O)"] <- "P"
+names(missense_data)[names(missense_data) == "N cases"] <- "cases"
+names(missense_data)[names(missense_data) == "N controls"] <- "controls"
+missense_data = subset(missense_data, P <=1)
+missense_data$type <- "missense"
+missense_data = subset(missense_data, select = c("Gene", "type", "Description", "Phenotype", "P", "Beta", "cases", "controls"))
+
+
+## plof
+plof_files <- dir_ls("~/GeneBass_burden/Modified_pLoF_Burden_Tests")
+# Create a function to read and process each file
+read_and_process <- function(path) {
+    df <- read_csv(path, col_types = cols(Sex = col_character(), Info = col_character(), Beta = col_double(), "N cases"= col_double(), "N controls"= col_double(), "...13" = col_character()))
+    return(df)
+}
+# Use map to apply the function to each file and store the results in a list
+plof_list <- map(plof_files, read_and_process)
+plof_data <- bind_rows(plof_list)
+plof_data <- plof_data %>% filter(Gene %in% MonoGen_genes)
+names(plof_data)[names(plof_data) == "P-Value (SKAT-O)"] <- "P"
+names(plof_data)[names(plof_data) == "N cases"] <- "cases"
+names(plof_data)[names(plof_data) == "N controls"] <- "controls"
+plof_data = subset(plof_data, P <=1)
+plof_data$type <- "plof"
+plof_data = subset(plof_data, select = c("Gene", "type", "Description", "Phenotype", "P", "Beta", "cases", "controls"))
+
+## Synonymous
+Synonymous_files <- dir_ls("~/GeneBass_burden/Modified_Synonymous_Burden_Tests")
+# Create a function to read and process each file
+read_and_process <- function(path) {
+    df <- read_csv(path, col_types = cols(Sex = col_character(), Info = col_character(), Beta = col_double(), "N cases"= col_double(), "N controls"= col_double(), "...13" = col_character()))
+    return(df)
+}
+# Use map to apply the function to each file and store the results in a list
+Synonymous_list <- map(Synonymous_files, read_and_process)
+Synonymous_data <- bind_rows(Synonymous_list)
+Synonymous_data <- Synonymous_data %>% filter(Gene %in% MonoGen_genes)
+names(Synonymous_data)[names(Synonymous_data) == "P-Value (SKAT-O)"] <- "P"
+names(Synonymous_data)[names(Synonymous_data) == "N cases"] <- "cases"
+names(Synonymous_data)[names(Synonymous_data) == "N controls"] <- "controls"
+Synonymous_data = subset(Synonymous_data, P <=1)
+Synonymous_data$type <- "Synonymous"
+Synonymous_data = subset(Synonymous_data, select = c("Gene", "type", "Description", "Phenotype", "P", "Beta", "cases", "controls"))
+
+burden_data <- rbind(missense_data, plof_data, Synonymous_data)
+## burden_data = subset(burden_data, P<=.05)
+fwrite(burden_data, "burden_data.txt", sep="\t")
+
+## unify names for phenotypes & filter
+Burden_pheno <- fread("~/MonogenLiveR/Burden_pheno.txt")
+
+burden_data_filt <- burden_data %>%  left_join(Burden_pheno, by = c("Description" = "Description")) %>% filter(!is.na(New))
+fwrite(burden_data_filt, "burden_data_filt.txt", sep="\t")
+
+## make a stacked barchart
+
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(scales)
+
+# Assuming burden_data_filt is already defined
+missense_bar_tab = subset(burden_data_filt, type == "missense")
+
+# Create P_category with defined levels
+missense_bar_tab <- missense_bar_tab %>%
+  mutate(P_category = case_when(
+    P >= 0.01 & P < 0.05 ~ "Some",
+    P >= 0.001 & P <= 0.01 ~ "Mod",
+    P < 0.001 ~ "Highly",
+    TRUE ~ "No significant"  # Catch-all for values that don't fit
+  )) %>%
+  mutate(P_category = factor(P_category, levels = c("Highly", "Mod", "Some", "No significant")))  # Define the factor levels
+
+# Group by Gene and New and arrange
+missense_bar_tab <- missense_bar_tab %>% 
+  group_by(Gene, New) %>% 
+  arrange(desc(P)) %>% 
+  slice(1)
+
+missense_bar_tab = subset(missense_bar_tab, New !="T2DM")
+missense_bar_tab = subset(missense_bar_tab, New !="CAD")
+missense_bar_tab = subset(missense_bar_tab, New !="Cholecystitis")
+missense_bar_tab = subset(missense_bar_tab, New !="Pancreatitis")
+
+missense_bar_tab <- missense_bar_tab %>%
+  mutate(New = recode(New, 
+                            "UC" = "IBD",
+                            "Crohns" = "IBD"))
+
+
+
+# Calculate percentages
+missense_bar_tab_perc <- missense_bar_tab %>% 
+  group_by(New) %>%
+  mutate(total = n()) %>%
+  group_by(New, P_category) %>%
+  summarise(count = n(), total = first(total), .groups = 'drop') %>%
+  mutate(percentage = (count / total) * 100)
+
+# Order by percentage for plotting
+missense_phenotype_order <- missense_bar_tab_perc %>%
+  filter(P_category == "No significant") %>%
+  arrange(desc(percentage)) %>%
+  pull(New)
+
+missense_bar_tab_perc <- missense_bar_tab_perc %>%
+  mutate(New = factor(New, levels = missense_phenotype_order)) %>%
+  filter(P_category != "No significant") 
+
+# Create the plot
+
+
+
+# Assuming burden_data_filt is already defined
+plof_bar_tab = subset(burden_data_filt, type == "plof")
+
+# Create P_category with defined levels
+plof_bar_tab <- plof_bar_tab %>%
+  mutate(P_category = case_when(
+    P >= 0.01 & P < 0.05 ~ "Some",
+    P >= 0.001 & P <= 0.01 ~ "Mod",
+    P < 0.001 ~ "Highly",
+    TRUE ~ "No significant"  # Catch-all for values that don't fit
+  )) %>%
+  mutate(P_category = factor(P_category, levels = c("Highly", "Mod", "Some", "No significant")))  # Define the factor levels
+
+# Group by Gene and New and arrange
+plof_bar_tab <- plof_bar_tab %>% 
+  group_by(Gene, New) %>% 
+  arrange(desc(P)) %>% 
+  slice(1)
+
+plof_bar_tab = subset(plof_bar_tab, New !="T2DM")
+plof_bar_tab = subset(plof_bar_tab, New !="CAD")
+plof_bar_tab = subset(plof_bar_tab, New !="Cholecystitis")
+plof_bar_tab = subset(plof_bar_tab, New !="Pancreatitis")
+
+plof_bar_tab <- plof_bar_tab %>%
+  mutate(New = recode(New, 
+                            "UC" = "IBD",
+                            "Crohns" = "IBD"))
+
+
+# Calculate percentages
+plof_bar_tab_perc <- plof_bar_tab %>% 
+  group_by(New) %>%
+  mutate(total = n()) %>%
+  group_by(New, P_category) %>%
+  summarise(count = n(), total = first(total), .groups = 'drop') %>%
+  mutate(percentage = (count / total) * 100)
+
+# Order by percentage for plotting
+plof_phenotype_order <- plof_bar_tab_perc %>%
+  filter(P_category == "No significant") %>%
+  arrange(desc(percentage)) %>%
+  pull(New)
+
+plof_bar_tab_perc <- plof_bar_tab_perc %>%
+  mutate(New = factor(New, levels = missense_phenotype_order)) %>%
+  filter(P_category != "No significant") 
+
+# Create the plot
+
+
+# Assuming burden_data_filt is already defined
+Synonymous_bar_tab = subset(burden_data_filt, type == "Synonymous")
+
+# Create P_category with defined levels
+Synonymous_bar_tab <- Synonymous_bar_tab %>%
+  mutate(P_category = case_when(
+    P >= 0.01 & P < 0.05 ~ "Some",
+    P >= 0.001 & P <= 0.01 ~ "Mod",
+    P < 0.001 ~ "Highly",
+    TRUE ~ "No significant"  # Catch-all for values that don't fit
+  )) %>%
+  mutate(P_category = factor(P_category, levels = c("Highly", "Mod", "Some", "No significant")))  # Define the factor levels
+
+# Group by Gene and New and arrange
+Synonymous_bar_tab <- Synonymous_bar_tab %>% 
+  group_by(Gene, New) %>% 
+  arrange(desc(P)) %>% 
+  slice(1)
+
+Synonymous_bar_tab = subset(Synonymous_bar_tab, New !="T2DM")
+Synonymous_bar_tab = subset(Synonymous_bar_tab, New !="CAD")
+Synonymous_bar_tab = subset(Synonymous_bar_tab, New !="Cholecystitis")
+Synonymous_bar_tab = subset(Synonymous_bar_tab, New !="Pancreatitis")
+Synonymous_bar_tab <- Synonymous_bar_tab %>%
+  mutate(New = recode(New, 
+                            "UC" = "IBD",
+                            "Crohns" = "IBD"))
+
+
+# Calculate percentages
+Synonymous_bar_tab_perc <- Synonymous_bar_tab %>% 
+  group_by(New) %>%
+  mutate(total = n()) %>%
+  group_by(New, P_category) %>%
+  summarise(count = n(), total = first(total), .groups = 'drop') %>%
+  mutate(percentage = (count / total) * 100)
+
+# Order by percentage for plotting
+Synonymous_phenotype_order <- Synonymous_bar_tab_perc %>%
+  filter(P_category == "No significant") %>%
+  arrange(desc(percentage)) %>%
+  pull(New)
+
+Synonymous_bar_tab_perc <- Synonymous_bar_tab_perc %>%
+  mutate(New = factor(New, levels = missense_phenotype_order)) %>%
+  filter(P_category != "No significant") 
+
+# Create the plots
+
+missense_barplot <- ggplot(missense_bar_tab_perc, aes(x = New, y = percentage, fill = P_category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "", y = "Percentage of genes", fill = "") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 30)) +  
+  theme_minimal() +
+  scale_fill_viridis_d(option = "plasma", labels = c("Highly" = "p < 0.001", "Mod" = "p < 0.01", "Some" = "p < 0.05")) +  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size=14))
+
+
+
+
+plof_barplot <- ggplot(plof_bar_tab_perc, aes(x = New, y = percentage, fill = P_category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "", y = "Percentage of genes", fill = "") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 30)) +  
+  theme_minimal() +
+  scale_fill_viridis_d(option = "plasma", labels = c("Highly" = "p < 0.001", "Mod" = "p < 0.01", "Some" = "p < 0.05")) +  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size=14))
+
+
+
+Synonymous_barplot <- ggplot(Synonymous_bar_tab_perc, aes(x = New, y = percentage, fill = P_category)) +
+  geom_bar(stat = "identity") +
+  labs(x = "", y = "Percentage of genes", fill = "") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0, 30)) +  
+  theme_minimal() +
+  scale_fill_viridis_d(option = "plasma", labels = c("Highly" = "p < 0.001", "Mod" = "p < 0.01", "Some" = "p < 0.05")) +  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size=14))
+
+library(cowplot)
+
+burden_comb_barplot <- plot_grid(Synonymous_barplot, missense_barplot, plof_barplot, ncol = 1)
+
+pdf("burden_comb_barplot.pdf", width = 12, height = 18)
+burden_comb_barplot
+dev.off()
+
+## make a trait correlation heatmap based on betas, per each form of burden testing
+
+
+Synonymous_corr_tab = subset(burden_data_filt, type == "Synonymous")
+burden_Beta_values_summary <- Synonymous_corr_tab %>%
+  group_by(Gene, Description) %>%
+  summarize(Avg_Beta = mean(Beta, na.rm = TRUE), .groups = 'drop')
+burden_Beta_values_wide <- burden_Beta_values_summary %>%
+  pivot_wider(names_from = Description, values_from = Avg_Beta) %>%
+  column_to_rownames(var = "Gene")
+View(burden_Beta_values_wide)
+cor_matrix <- cor(burden_Beta_values_wide, use = "pairwise.complete.obs")
+library(pheatmap)
+Synonymous_cor_hm <- pheatmap(cor_matrix, display_numbers = FALSE, show_rownames = FALSE, show_colnames = FALSE, )
+pdf("Synonymous_cor_hm.pdf", width = 12, height = 10)
+Synonymous_cor_hm
+dev.off()
+
+
+plof_corr_tab = subset(burden_data_filt, type == "plof")
+burden_Beta_values_summary <- plof_corr_tab %>%
+  group_by(Gene, Description) %>%
+  summarize(Avg_Beta = mean(Beta, na.rm = TRUE), .groups = 'drop')
+burden_Beta_values_wide <- burden_Beta_values_summary %>%
+  pivot_wider(names_from = Description, values_from = Avg_Beta) %>%
+  column_to_rownames(var = "Gene")
+View(burden_Beta_values_wide)
+cor_matrix <- cor(burden_Beta_values_wide, use = "pairwise.complete.obs")
+library(pheatmap)
+plof_cor_hm <- pheatmap(cor_matrix, display_numbers = FALSE, show_rownames = FALSE, show_colnames = FALSE, )
+pdf("plof_cor_hm.pdf", width = 12, height = 10)
+plof_cor_hm
+dev.off()
+
+
+missense_corr_tab = subset(burden_data_filt, type == "missense")
+burden_Beta_values_summary <- missense_corr_tab %>%
+  group_by(Gene, Description) %>%
+  summarize(Avg_Beta = mean(Beta, na.rm = TRUE), .groups = 'drop')
+burden_Beta_values_wide <- burden_Beta_values_summary %>%
+  pivot_wider(names_from = Description, values_from = Avg_Beta) %>%
+  column_to_rownames(var = "Gene")
+View(burden_Beta_values_wide)
+cor_matrix <- cor(burden_Beta_values_wide, use = "pairwise.complete.obs")
+library(pheatmap)
+missense_cor_hm <- pheatmap(cor_matrix, display_numbers = FALSE, show_rownames = FALSE, show_colnames = FALSE, )
+pdf("missense_cor_hm.pdf", width = 12, height = 10)
+missense_cor_hm
+dev.off()
+
+
+
+##### make a heatmap
+
+# Filter for liver-related traits
+# Create summary figure: heatmap with Genes as rows and traits as columns, encoding Beta by colour
+burden_hep <- filter(burden_data_filt, group == "Liver")
+burden_hep_hmtab <- subset(burden_hep, select = c("Gene", "New", "Beta", "P"))
+burden_hep_hmtab <- burden_hep_hmtab %>% group_by(Gene, New) %>% arrange(P) %>% slice(1)
+burden_hep_annot <- burden_hep_hmtab
+burden_hep_hmtab <- subset(burden_hep_hmtab, select = c("Gene", "New", "Beta"))
+burden_hep_hmtab <- pivot_wider(burden_hep_hmtab, names_from = New, values_from = Beta, values_fill = NA)
+burden_hep_hmtab = subset(burden_hep_hmtab, Gene !="PNPLA3")
+burden_hep_hm_rows <- burden_hep_hmtab$Gene
+burden_hep_hmtab <- burden_hep_hmtab %>% arrange(Gene)
+burden_hep_hmtab <- subset(burden_hep_hmtab, select = -c(Gene))
+burden_hep_hm_cols <- names(burden_hep_hmtab)
+
+library(DescTools)
+# create annotation with p-values
+burden_hep_annot <- subset(burden_hep_annot, select = -c(Beta))
+burden_hep_annot <- pivot_wider(burden_hep_annot, names_from = New, values_from = P, values_fill = NA)
+burden_hep_annot <- burden_hep_annot[burden_hep_annot$Gene %in% burden_hep_hm_rows, ]
+burden_hep_annot <- burden_hep_annot %>% arrange(Gene)
+burden_hep_annot <- subset(burden_hep_annot, select = c(burden_hep_hm_cols))
+# Define annotation symbols
+annotation_symbols <- c("", ".", "*", "**", "***", "****")
+
+# Define significance levels
+significance_levels <- c(0.05, 0.01, 0.001, 0.0001)
+
+# Function to map p-values to annotation symbols
+map_pvalues_to_symbols <- function(p_values) {
+    symbols <- character(length(p_values))
+    for (i in seq_along(p_values)) {
+        if (is.na(p_values[i])) {
+            symbols[i] <- ""  # Or assign a specific symbol for missing values if needed
+        } else if (p_values[i] < significance_levels[4]) {
+            symbols[i] <- annotation_symbols[6]
+        } else if (p_values[i] < significance_levels[3]) {
+            symbols[i] <- annotation_symbols[5]
+        } else if (p_values[i] < significance_levels[2]) {
+            symbols[i] <- annotation_symbols[4]
+        } else if (p_values[i] < significance_levels[1]) {
+            symbols[i] <- annotation_symbols[3]
+        } else {
+            symbols[i] <- annotation_symbols[1]
+        }
+    }
+    return(symbols)
+}
+
+annotation <- sapply(burden_hep_annot, map_pvalues_to_symbols) # Apply the function to create annotation symbols
+burden_hep_annot2 <- as.data.frame(annotation, stringsAsFactors = FALSE) # Convert the annotation to a data frame
+
+
+burden_hep_hmtab[is.na(burden_hep_hmtab)] <- 0
+
+pdf("burden_hep_pheatmap.pdf", width = 10, height = 10)
+burden_hep_pheatmap <- pheatmap::pheatmap(burden_hep_hmtab, labels_col= burden_hep_hm_cols, angle_col = 45, fontsize_legend = 8, scale = "none", treeheight_row = 20, treeheight_col = 10, labels_row= burden_hep_hm_rows, display_numbers = burden_hep_annot2, fontsize_row=7)
+dev.off()
+
+##
+## make a summary table of GeneBass gene scores
+##
+
+burden_data_sumtab <- burden_data_filt %>% group_by(Gene, type, New) %>% arrange(P) %>% slice(1)
+burden_data_sumtab$Beta <- as.numeric(burden_data_sumtab$Beta)
+burden_data_sumtab$Beta <- signif(burden_data_sumtab$Beta, digits=2)
+burden_data_sumtab$P <- signif(burden_data_sumtab$P, digits=2)
+burden_data_sumtab = subset(burden_data_sumtab, select=c(Gene, type, New, P, Beta, cases, controls, Description))
+burden_data_sumtab <- burden_data_sumtab %>% mutate(type = ifelse(type == "missense", "Missense", type))
+burden_data_sumtab <- burden_data_sumtab %>% mutate(type = ifelse(type == "plof", "pLoF", type))
+colnames(burden_data_sumtab) <- c("Gene", "Burden test", "Trait", "P", "Beta", "Cases", "Controls", "Trait description")
+fwrite(burden_data_sumtab, "burden_data_sumtab.txt", sep="\t")
+
+burden_data_sigtab = subset(burden_data_sumtab, P<.05)
+fwrite(burden_data_sigtab, "burden_data_sigtab.txt", sep="\t")
+
+#### - - -
+#### - - - - - - make a pie chart of genebass burden testing
+#### - - -
+
+# Load required libraries
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(viridis)
+
+# Assuming burden_hep_counts is already defined and contains the total_yes values
+burden_grouped_counts <- burden_hep_counts %>%
+  group_by(total_yes) %>%
+  summarise(num_Genes = n()) %>%
+  arrange(desc(total_yes))
+
+# Grouping total_yes into specified categories and assigning factor levels
+burden_grouped_counts <- burden_grouped_counts %>%
+  mutate(
+    total_yes_grouped = case_when(
+      total_yes == 0 ~ "0",
+      total_yes >= 1 & total_yes <= 3 ~ "1-3",
+      total_yes == 4 ~ "4",
+      total_yes == 5 ~ "5",
+      total_yes == 6 ~ "6",
+      total_yes >= 7 & total_yes <= 9 ~ "7-9",
+      total_yes >= 10 & total_yes <= 12 ~ "10-12",
+      total_yes > 12 ~ ">12",
+      TRUE ~ "Other"  # Just in case there are any unexpected values
+    ),
+    total_yes_grouped = factor(total_yes_grouped, levels = c("0", "1-3", "4", "5", "6", "7-9", "10-12", ">12"))  # Assigning factor levels
+  ) %>%
+  group_by(total_yes_grouped) %>%
+  summarise(num_Genes = sum(num_Genes)) %>%
+  arrange(desc(total_yes_grouped))
+
+# Calculate percentage and position for labels
+burden_grouped_counts <- burden_grouped_counts %>%
+  mutate(percentage = num_Genes / sum(num_Genes) * 100,
+         ypos = cumsum(percentage) - 0.5 * percentage)
+
+# Create the pie chart with reversed colors and conditional text color
+burden_pie2 <- ggplot(burden_grouped_counts, aes(x = "", y = num_Genes, fill = total_yes_grouped)) +
+  geom_bar(width = 1, stat = "identity", color = "white") + # Create pie chart
+  coord_polar(theta = "y", start = 0) +  # Convert to polar coordinates
+  theme_void() +  # Remove axes and grid
+  scale_fill_viridis_d(option = "plasma", direction = -1) +  # Reverse the Viridis color palette
+  geom_label_repel(aes(y = ypos, label = paste(total_yes_grouped, "traits,", num_Genes, "Genes")), nudge_x = 0.2,
+                   show.legend = FALSE,  # Don't show labels in the legend
+                   size = 4, 
+                   color = ifelse(burden_grouped_counts$total_yes_grouped %in% c("10-12", ">12", "6", "7-9"), "white", "black")) +  # Set line color to black
+  theme(legend.position = "none")  # Hide the legend
+
+pdf("burden_pie.pdf", width = 6, height = 6)
+burden_pie2
+dev.off()
+
+
+
+
+
+
+
+
+
+
+##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  ##### ---- Variant-level analyses
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  
+##### ---- 
+
+##### ---- 
+##### ---- 
+##### ---- Variant-trait from CMDP
+##### ---- 
+##### ---- 
+
+## Get top variant-trait GWAS summary stats for each of those genes from CMDP - 
+#https://hugeamp.org/ - Input gene into search bar then search by 'region' and download the csv for 'Most significant variant associations in the region'. [This gives data on common variants and associations with individual traits, by picking lead variants.] Only gives significant variant-trait associations.
+
+# Create an empty list to store data frames
+CMDP_list <- list()
+
+## region for BSC1L and CYP27A1 overlap so data only imported from CYP27A1 here
+
+# Loop through gene names
+for (gene_name in MonoGen_genes) {
+    # Read CSV file
+    file_path <- paste0("~/CMDP_vars/HuGE_Region_", gene_name, ".csv")
+    gene_data <- read_csv(file_path, col_types = cols(reference = col_character(), alt = col_character()))
+    
+    # Check for 'SNP' column
+    if (!"SNP" %in% names(gene_data)) {
+        warning(paste("The column 'SNP' is not found in", gene_name))
+        next  # Skip to the next gene if 'SNP' is not found
+    }
+    
+    # Modify data frame
+    names(gene_data)[names(gene_data) == "group"] <- "SNP"
+    gene_data <- subset(gene_data, select = c(varId, SNP, chromosome, position, reference, alt, clump, clumpEnd, clumpStart, phenotype, beta, stdErr, pValue, n))
+    gene_data$gene_lookup <- gene_name
+    gene_data$clump <- as.character(gene_data$clump)
+    
+    # Append to list
+    CMDP_list[[gene_name]] <- gene_data
+}
+
+
+
+# Combine all data frames into one
+CMDP_data <- bind_rows(CMDP_list)
+CMDP_data <- subset(CMDP_data, select = c(gene_lookup, SNP, varId, chromosome, position, reference, alt, phenotype, beta, stdErr, pValue, n))
+fwrite(CMDP_data, "CMDP_data.txt", sep="\t")
+
+## get hg38 co-ordinates for each variant
+CMDP_vars <- CMDP_data %>% distinct(SNP)
+fwrite(CMDP_vars, "CMDP_vars.txt", sep="\t")
+
+## manually done with UCSC liftover https://genome.ucsc.edu/cgi-bin/hgTables
+CMDP_vars38 <- fread("CMDP_vars38.csv")
+names(CMDP_vars38)[names(CMDP_vars38) == "chromEnd"] <- "position38"
+names(CMDP_vars38)[names(CMDP_vars38) == "name"] <- "SNP"
+CMDP_vars38 = subset(CMDP_vars38, select = c("SNP", "position38"))
+CMDP_data <- merge(CMDP_data, CMDP_vars38, by ="SNP")
+CMDP_data <- subset(CMDP_data, select = c(gene_lookup, SNP, chromosome, position, position38, reference, alt, phenotype, beta, stdErr, pValue, n))
+CMDP_data$varId <- paste(CMDP_data$chromosome, CMDP_data$position38, sep = "_")
+CMDP_data$varId <- paste(CMDP_data$varId, CMDP_data$reference, sep = "_")
+CMDP_data$varId <- paste(CMDP_data$varId, CMDP_data$alt, sep = "_")
+CMDP_data$source <- "CMDP"
+CMDP_data <- subset(CMDP_data, select = c(gene_lookup, SNP, varId, phenotype, beta, stdErr, pValue, n, source))
+
+# filter for relevant traits
+library(readxl)
+CMDP_phenotypes <- read_excel("~/MonogenLiveR/CMDP_phenotypes.xlsx")
+CMDP_phenotypes_filt1 <- CMDP_data[CMDP_data$phenotype %in% CMDP_phenotypes$phenotype1, ]
+CMDP_phenotypes_filt2 <- CMDP_data[CMDP_data$phenotype %in% CMDP_phenotypes$phenotype2, ]
+
+
+
+##### ---- 
+##### ---- Variant-trait from UKBB exomes (GeneBass)
+##### ---- 
+##### ---- 
+## Download individual variant-trait associations from UKBB exomes. https://app.genebass.org/. Search by phenotype e.g. start typing 'alanine aminotran..'. Change to 'Variant manhattan' in the top bar. Change 'Min P-value' to -5. Then download the CSV (need to scroll page to the bottom). Repeat for other traits (ALT, AST, ALP, GGT, total bili, direct bili). Merge all results into a single file
+
+# get all raw data files
+GBvars_files <- dir_ls("~/GeneBass_vars")
+
+# Create a function to read and process each file
+read_and_process <- function(path) {
+    df <- read_csv(path)
+    names(df)[names(df) == "Variant ID"] <- "varId"
+names(df)[names(df) == "P-Value"] <- "P"
+names(df)[names(df) == "AF NFE"] <- "EAF"
+filename <- tools::file_path_sans_ext(basename(path))
+df$trait <- filename
+    return(df)
+}
+
+# Use map to apply the function to each file and store the results in a list
+GBvars_data <- map(GBvars_files, read_and_process)
+GBvars <- bind_rows(GBvars_data)
+GBvars =subset(GBvars, select = -c(Gene))
+GBvars <- GBvars %>% separate_wider_delim(HGVSc, delim = ":", names = c("HGVSc", "HGVSc_var"), too_few = "align_start")
+GBvars <- GBvars %>% separate_wider_delim(varId, delim = "-", names = c("chromosome", "start", "ref", "alt"), too_few = "align_start")
+
+GBvars <- GBvars %>%
+  mutate(
+    alt_length = nchar(alt),  # Calculate length of 'alt'
+    ref_length = nchar(ref),  # Calculate length of 'reference'
+    difference = alt_length - ref_length,  # Find the difference
+    end = ifelse(alt_length > ref_length, as.numeric(start) + difference, as.numeric(start))  # Create 'end' column based on conditions
+  )
+GBvars$var_pos <- paste(GBvars$chromosome, GBvars$start, sep = ":")
+GBvars$var_pos <- paste(GBvars$var_pos, GBvars$end, sep = ":")
+
+## no gene names attached. need to annotate using ensembl from transcript data
+library(biomaRt)
+ensembl <- useMart("ensembl")
+datasets <- listDatasets(ensembl)
+ensembl_dt <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+filters <- listFilters(ensembl_dt) #for inputs
+attributes <- listAttributes(ensembl_dt) #search through for outputs
+myAttributes <- c("external_gene_name", "external_transcript_name", "ensembl_transcript_id_version")
+
+GBvars_genes <- getBM(attributes = myAttributes, filters =  "ensembl_transcript_id_version", values = GBvars$HGVSc, mart = ensembl_dt)
+names(GBvars_genes)[names(GBvars_genes) == "ensembl_transcript_id_version"] <- "HGVSc"
+names(GBvars_genes)[names(GBvars_genes) == "ensembl_transcript_id_version"] <- "Gene"
+GBvars <- merge(GBvars, GBvars_genes, by = "HGVSc")
+
+# Filter for genes of interest
+GBvars <- GBvars[GBvars$external_gene_name %in% MonoGen_genes, ]
+
+# make varId column for merging all datasets
+GBvars$varId <- paste(GBvars$chromosome, GBvars$start, sep = "_")
+GBvars$varId <- paste(GBvars$varId, GBvars$ref, sep = "_")
+GBvars$varId <- paste(GBvars$varId, GBvars$alt, sep = "_")
+GBvars$source <- "GeneBass"
+GBvars$SNP <- ""
+GBvars$stdErr <- ""
+colnames(GBvars)
+GBvars_sub = subset(GBvars, select= c("external_gene_name", "SNP", "varId", "trait", "Beta", "stdErr", "P", "AN NFE", "source"))
+colnames(GBvars_sub) <- c("gene_lookup", "SNP", "varId", "phenotype", "beta", "stdErr", "pValue", "n", "source")
+GBvars_sub$n = GBvars_sub$n/2
+
+##### ---- 
+##### ---- Variant-trait from OpenTargets Genetics
+##### ---- 
+##### ---- 
+## Download further individual variation-association data for each gene: https://genetics.opentargets.org/. Search by gene. Download the 'Associated studies: locus-to-gene pipeline' - as CSV. 
+
+## 
+# get all raw data files
+OTvars_files <- dir_ls("~/OTdata/OT_variant_data")
+
+# Create a function to read and process each file
+read_and_process <- function(path) {
+    df <- read_csv(path)
+    names(df)[names(df) == "Index.Variant.ID"] <- "varId"
+    names(df)[names(df) == "P.Value"] <- "pValue"
+    names(df)[names(df) == "Gene"] <- "gene_lookup"
+    names(df)[names(df) == "Beta"] <- "beta"
+    names(df)[names(df) == "Study.N.Initial"] <- "n"
+names(df)[names(df) == "Reported.Trait"] <- "phenotype"
+names(df)[names(df) == "Index.Variant.RSID"] <- "SNP"
+    filename <- tools::file_path_sans_ext(basename(path))
+    
+    # Drop the "Date" column if it exists
+    if ("Date" %in% colnames(df)) {
+        df <- df[, !colnames(df) %in% "Date"]
+    }
+    
+    return(df)
+}
+
+# Use map to apply the function to each file and store the results in a list
+OTvars_data <- map(OTvars_files, read_and_process)
+OTvars <- bind_rows(OTvars_data)
+
+OTvars$stdErr = (OTvars$Beta.CI.Upper-OTvars$Beta.CI.Lower)/3.92
+OTvars$source <- "OT"
+
+
+OT_data = subset(OTvars, select = c("gene_lookup", "SNP", "varId", "phenotype", "beta", "stdErr", "pValue", "n", "source"))
+fwrite(OT_data, "OT_data.txt", sep="\t")
+
+## filter for relevant traits
+OT_data <- OT_data %>% left_join(Burden_pheno, by = c("phenotype" = "Description")) %>% filter(!is.na(New))
+OT_data = subset(OT_data, select = c("gene_lookup", "SNP", "varId", "New", "beta", "stdErr", "pValue", "n", "source"))
+colnames(OT_data) <- c("gene_lookup", "SNP", "varId", "phenotype", "beta", "stdErr", "pValue", "n", "source")
+
+##### ---- ##### ---- ##### ---- 
+##### ---- ##### ---- ##### ----  bind together and tidy the three variant-level tables (CMDP, OT, and GeneBass)
+##### ---- ##### ---- ##### ---- 
+
+# not all pvalue columns numeric
+OT_data$pValue <- as.numeric(OT_data$pValue)
+GBvars_sub$pValue <- as.numeric(GBvars_sub$pValue)
+CMDP_phenotypes_filt2$pValue <- as.numeric(CMDP_phenotypes_filt2$pValue)
+
+# bind all prepped data tables together # not yet filtered or removed duplicates
+vars_full <- rbind(OT_data, GBvars_sub, CMDP_phenotypes_filt2)
+vars_full <- vars_full %>% mutate(pValue = ifelse(pValue == "0", "1e-307", pValue)) # this makes it a character field
+vars_full$pValue <- as.numeric(vars_full$pValue)
+
+##### ---- ##### ---- ##### ---- make a figure of all variants
+
+vars_all <- rbind(OT_data, GBvars_sub, CMDP_phenotypes_filt2)
+vars_all = subset(vars_all, gene_lookup !="PNPLA3")
+
+vars_all <- vars_all %>% mutate(phenotype = recode(phenotype, 
+                            "DirectBilirubin" = "Direct bilirubin", 
+"DirectBili" = "Direct bilirubin", 
+                            "SerumUrea" = "Serum urea", 
+                            "CAD" = "Coronary artery disease",  # Corrected line
+                            "AST_ALT_ratio" = "AST:ALT ratio", 
+                            "BILIRUBIN" = "Bilirubin", 
+"TotBili" = "Bilirubin",
+                            "T2D"  = "T2DM", 
+                            "Alb" = "Albumin", 
+                            "HYPERTENSION" = "Hypertension", 
+                            "HBA1C" = "HbA1c", 
+                            "CystatinC" = "Cystatin C", 
+                            "PlatCount" = "Platelet count", 
+                            "CHOL" = "Total cholesterol", "LiverFat" = "Liver fat"))
+
+vars_all <- vars_all %>% distinct()
+vars_all <- vars_all %>% mutate(pValue = ifelse(pValue == "0", "1e-307", pValue)) # this makes it a character field
+vars_all$pValue <- as.numeric(vars_all$pValue)
+
+
+vars_all$neglog_p <- -log10(vars_all$pValue)
+vars_all_fig = subset(vars_all, phenotype =="Albumin" | phenotype =="ALP" | phenotype =="ALT"  | phenotype =="AST"  | phenotype =="Bilirubin"  | phenotype =="Cholelithiasis"  | phenotype =="Direct bilirubin" | phenotype =="GGT")
+
+
+# Add a factor for phenotype with levels for spacing
+vars_all_fig <- vars_all_fig %>% mutate(phenotype = factor(phenotype, levels = unique(phenotype)))
+
+# Select top 10 variants for each phenotype and ensure unique gene_lookup labels
+
+AST_labels <- vars_all_fig %>% filter(phenotype == "AST") %>% arrange(desc(neglog_p)) %>% distinct(gene_lookup, .keep_all = TRUE) %>% slice_head(n = 5) 
+Bilirubin_labels <- vars_all_fig %>% filter(phenotype == "Bilirubin") %>% arrange(desc(neglog_p)) %>% distinct(gene_lookup, .keep_all = TRUE) %>% slice_head(n = 5) 
+ALP_labels <- vars_all_fig %>% filter(phenotype == "ALP") %>% arrange(desc(neglog_p)) %>% distinct(gene_lookup, .keep_all = TRUE) %>% slice_head(n = 12) 
+GGT_labels <- vars_all_fig %>% filter(phenotype == "GGT") %>% arrange(desc(neglog_p)) %>% distinct(gene_lookup, .keep_all = TRUE) %>% slice_head(n = 9) 
+ALT_labels <- vars_all_fig %>% filter(phenotype == "ALT") %>% arrange(desc(neglog_p)) %>% distinct(gene_lookup, .keep_all = TRUE) %>% slice_head(n = 9) 
+Cholelithiasis_labels <- vars_all_fig %>% filter(phenotype == "Cholelithiasis") %>% arrange(desc(neglog_p)) %>% distinct(gene_lookup, .keep_all = TRUE) %>% slice_head(n = 3) 
+Dirbili_labels <- vars_all_fig %>% filter(phenotype == "Direct bilirubin") %>% arrange(desc(neglog_p)) %>% distinct(gene_lookup, .keep_all = TRUE) %>% slice_head(n = 5) 
+Albumin_labels <- vars_all_fig %>% filter(phenotype == "Albumin") %>% arrange(desc(neglog_p)) %>% distinct(gene_lookup, .keep_all = TRUE) %>% slice_head(n = 6) 
+top_genes_labels <- rbind(AST_labels, ALP_labels, GGT_labels, ALT_labels, Cholelithiasis_labels, Bilirubin_labels, Dirbili_labels, Albumin_labels)
+
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(viridis)
+
+
+# Create the plot
+vars_all_dot <- ggplot(data = vars_all_fig, aes(x = phenotype, y = neglog_p)) +
+  geom_point(position = position_jitterdodge(), 
+             size = 1, 
+             alpha = 0.5, 
+             aes(colour = neglog_p),  # Color by neglog_p
+             show.legend = TRUE) +  # Optional: Set to FALSE if you don't want a legend
+  geom_label_repel(data = top_genes_labels, aes(label = gene_lookup), 
+                   nudge_y = 10, 
+                   show.legend = FALSE, 
+                   max.overlaps = Inf, fill = "white") +  # Adjust nudge_y as needed
+  ylab("-log10(p)") +
+  theme_classic() +
+  theme(plot.margin = margin(10, 10, 10, 10, "pt"),
+        legend.position = "right",  # Position the legend
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 11),
+        axis.title.y = element_text(size = 12, angle = 90, vjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  labs(fill = "-log10(p)") +  # Label for the fill legend
+  xlab("") +   geom_hline(yintercept = 8, linetype = "dotted", color = "red") +
+  scale_color_viridis_c(option = "plasma")  # Use the viridis color scale
+
+# Display the plot
+
+pdf("vars_all_dot.pdf", width = 20, height = 8)
+vars_all_dot
+dev.off()
+
+
+
+
+
+
+##### ---- ##### ---- ##### ---- 
+##### ---- ##### ---- ##### ----  filter for GWAS-sig variant-associations and feed into VEP
+##### ---- ##### ---- ##### ---- 
+
+# filter for only GWAS-sig variants
+vars_full = subset(vars_full, pValue <=5e-8)
+
+### - - - make a figure showing the percentage of genes that have at least one significant variant 
+
+vars_full_noPNP = subset(vars_full, gene_lookup !="PNPLA3")
+
+vars_full_noPNP <- vars_full_noPNP %>%
+  mutate(phenotype = recode(phenotype, 
+                            "DirectBilirubin" = "Direct bilirubin", 
+"DirectBili" = "Direct bilirubin", 
+                            "SerumUrea" = "Serum urea", 
+                            "CAD" = "Coronary artery disease",  # Corrected line
+                            "AST_ALT_ratio" = "AST:ALT ratio", 
+                            "BILIRUBIN" = "Bilirubin", 
+"TotBili" = "Bilirubin",
+                            "T2D"  = "T2DM", 
+                            "Alb" = "Albumin", 
+                            "HYPERTENSION" = "Hypertension", 
+                            "HBA1C" = "HbA1c", 
+                            "CystatinC" = "Cystatin C", 
+                            "PlatCount" = "Platelet count", 
+                            "CHOL" = "Total cholesterol", "LiverFat" = "Liver fat"))
+
+gene_percentage_by_phenotype <- vars_full_noPNP %>%
+  group_by(phenotype) %>%
+  summarise(unique_genes = n_distinct(gene_lookup)) %>%
+  ungroup() %>%
+  mutate(total_genes = n_distinct(vars_full_noPNP$gene_lookup),  # Total unique genes
+         percentage = (unique_genes / total_genes) * 100)
+
+gene_percentage_by_phenotype = subset(gene_percentage_by_phenotype, phenotype !="Alcohol")
+gene_percentage_by_phenotype <- gene_percentage_by_phenotype %>% arrange(desc(percentage))
+
+pdf("gene_percentage.pdf", width = 16, height = 8)
+ggplot(gene_percentage_by_phenotype, aes(x = reorder(phenotype, percentage), y = percentage, fill = percentage)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +  # Remove legend
+  labs(x = "", y = "Percentage of genes") +
+  scale_y_continuous(labels = scales::percent_format(scale = 1), expand = c(0, 0)) +
+  scale_fill_viridis_c(option = "plasma") +  # Use continuous color scale
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size=16))
+dev.off()
+
+
+
+
+
+# error with one of the varaints coordinate conversion
+vars_full = subset(vars_full, varId !="2_34511_A_G")
+
+vars_full$pValue <- as.numeric(vars_full$pValue)
+# none associated with alcohol (apart from PNPLA3 as positive control associated with ARLD)
+# filter for only liver-related traits
+vars_full = subset(vars_full, phenotype !="T2DM" & phenotype !="HDL" & phenotype !="UC" & phenotype !="TG" & phenotype !="Albumin-globulin ratio" & phenotype !="CAD")
+vars_full_gene = subset(vars_full, select = c("gene_lookup", "varId", "SNP"))
+vars_full_gene <- vars_full_gene %>% distinct()
+
+# prep for insertion into VEP
+vars_unique <- vars_full %>% distinct(varId)
+vars_unique$varId_dup <- vars_unique$varId
+
+##
+##### --- code to take chr_pos_ref_alt and turn into ensmble default for VEP
+##
+library(dplyr)
+
+# Separate the string by "_" into chromosome, position, ref, alt
+vars_unique <- vars_unique %>%
+  separate(varId, into = c("chromosome", "position", "ref", "alt"), sep = "_")
+vars_unique$chromosome <- as.numeric(vars_unique$chromosome)
+vars_unique$position <- as.numeric(vars_unique$position)
+
+## sort by chromosome and location
+vars_unique <- vars_unique %>% arrange(chromosome, position)
+
+
+# Make a new column for 'type'
+vars_unique <- vars_unique %>%
+  mutate(type = case_when(
+    nchar(ref) == nchar(alt) ~ "substitution",
+    nchar(ref) > nchar(alt) ~ "deletion",
+    nchar(ref) < nchar(alt) ~ "insertion"
+  ))
+
+# Create 'position', 'end', and modify accordingly
+vars_unique <- vars_unique %>%
+  mutate(
+    position = as.numeric(position),
+    end = case_when(
+      type == "substitution" ~ position,
+      type == "insertion" ~ position + 1,
+      type == "deletion" ~ position - (nchar(ref) - nchar(alt))
+    )
+  )
+
+# Modify ref, alt, and create allele column
+vars_unique <- vars_unique %>%
+  mutate(
+    allele = paste(ref, alt, sep = "/"),
+    ref = ifelse(nchar(ref) < nchar(alt), "-", substr(ref, nchar(ref) - nchar(alt) + 1, nchar(ref))),
+    alt = ifelse(nchar(ref) > nchar(alt), "-", substr(alt, nchar(alt) - nchar(ref) + 1, nchar(alt)))
+  )
+
+# Make a column called strand and fill with '+'
+vars_unique$strand <- "+"
+
+# Tidy the table
+vars_unique <- vars_unique %>% dplyr::select(chromosome, position, end, allele, strand, varId_dup)
+
+vars_unique$chromosome <- as.numeric(vars_unique$chromosome)
+vars_unique$position <- as.numeric(vars_unique$position)
+
+## sort by chromosome and location
+vars_unique <- vars_unique %>% arrange(chromosome, position)
+
+##### ---- ##### ---- ##### ---- 
+##### ---- ##### ---- ##### ----  origianl variants now ready to go into VEP
+##### ---- ##### ---- ##### ---- 
+
+# write the table to manually paste into VEP
+fwrite(vars_unique, "vars_unique.txt", sep="\t")
+
+##
+##### --- run VEP to find major functional variants (and get rsid where blank)
+##
+
+##### ---- ##### ---- ##### ---- 
+##### ---- ##### ---- ##### ----  import table with results from VEP
+##### ---- ##### ---- ##### ---- 
+
+VEP_vars <- fread("VEP_vars_4Oct24.txt")
+names(VEP_vars)[names(VEP_vars) == "#Uploaded_variation"] <- "varId"
+VEP_vars <- VEP_vars %>% separate_wider_delim(Existing_variation, delim = ",", names = c("rsid", "other_id"), too_few = "align_start", too_many = "merge")
+Vars_rsID = subset(VEP_vars, select = c(varId, rsid))
+Vars_rsID <- subset(Vars_rsID, grepl("rs", rsid))
+Vars_rsID <- Vars_rsID %>% distinct()
+
+## add rsIDs onto list of unique vars
+vars_full_gene <- vars_full_gene %>%  mutate(SNP = ifelse(SNP == "", Vars_rsID$rsid[match(varId, Vars_rsID$varId)], SNP))
+fwrite(vars_full_gene, "vars_full_gene.txt", sep="\t")
+
+## get a list of variants without an rsID
+vars_full_gene$varId_dup <- vars_full_gene$varId
+vars_full_gene <- vars_full_gene %>% separate_wider_delim(varId_dup, delim = "_", names = c("chromosome", "start", "ref", "alt"), too_few = "align_start", too_many = "merge")
+vars_unique_norsid =subset(vars_full_gene, is.na(SNP))
+vars_unique_norsid$input <- paste("chr", vars_unique_norsid$chromosome, sep="")
+vars_unique_norsid$input <- paste(vars_unique_norsid$input, vars_unique_norsid$start, sep=":")
+
+
+##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  ##### ---- Look for proxies of original variant in case they are the major functional variant or have sig eQTLs
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  
+##### ---- 
+
+save.image("~/Monogen_Feb25.RData")
+
+## find proxies for those rsID
+getLD_wSNP <- vars_full_gene
+
+
+##---- run in background
+library(callr)
+## ~/
+
+# Load required libraries
+library(readr)
+
+## source("~/run_ldproxy_background.R")
+
+library(LDlinkR)
+library(data.table)
+library(readxl)
+
+getLD_wSNP <- fread("getLD_wSNP.txt")
+getLD_wSNP <- getLD_wSNP[complete.cases(getLD_wSNP$SNP), ]
+getLD_wSNP = subset(getLD_wSNP, SNP !="")
+
+## use a loop to obtain all the proxies
+library(data.table)
+library(readxl)
+
+# check which files are there against list of SNPs and then repeat as needed - and stop when variants not present in 1000G reference
+
+# Set up directories and parameters
+proxies_folder <- "~/MonoGen_LivDis/proxies/"
+all_proxies <- NULL
+max_iterations <- 10  # Maximum number of iterations
+iteration <- 0
+missing_variants <- c()  # To track variants not in the reference panel
+
+repeat {
+    iteration <- iteration + 1
+    
+    # Step 1: Check which SNPs don't have corresponding files
+    if (is.null(all_proxies)) {
+        # For the first iteration, check all SNPs in getLD_wSNP
+        getLD_wSNP$has_file <- sapply(getLD_wSNP$SNP, function(snp) {
+            # Use list.files to find any file starting with 'rs*.txt'
+            length(list.files(proxies_folder, pattern = paste0("^", snp, ".*\\.txt$"))) > 0
+        })
+        SNPs_notobtained <- getLD_wSNP[!getLD_wSNP$has_file & !(getLD_wSNP$SNP %in% missing_variants), ]
+    } else {
+        # In subsequent iterations, check remaining SNPs
+        Proxies_obtained <- read_excel("Proxies_obtained.xlsx")
+        SNPs_notobtained <- getLD_wSNP[!(getLD_wSNP$SNP %in% Proxies_obtained$rsid) & !(getLD_wSNP$SNP %in% missing_variants), ]
+        SNPs_notobtained <- subset(SNPs_notobtained, SNP != "")
+    }
+    
+    # Exit if no SNPs are left to obtain
+    if (nrow(SNPs_notobtained) == 0) {
+        cat("No more SNPs to process.\n")
+        break
+    }
+    
+    # Step 2: Retrieve LD proxies for SNPs that haven't been obtained yet
+    vars_proxy <- tryCatch({
+        LDproxy_batch(SNPs_notobtained$SNP, pop = "ALL", r2d = "r2", token = "5fec2771315b", append = FALSE, genome_build = "grch38")
+    }, error = function(e) {
+        # If there's an error, return a message indicating the issue
+        message(e)
+        NULL
+    })
+    
+    # Step 3: Handle the case where the variant is not in the reference panel
+    if (is.null(vars_proxy)) {
+        # Look for the specific error message indicating the variant is not in the reference panel
+        error_variants <- grep("Variant is not in 1000G reference panel", capture.output(vars_proxy), value = TRUE)
+        
+        if (length(error_variants) > 0) {
+            # Extract the variant ID from the error message and add it to the missing_variants list
+            missing_variant <- sub(".*error: (rs[0-9]+) .*", "\\1", error_variants)
+            missing_variants <- unique(c(missing_variants, missing_variant))
+            cat("Excluding variant", missing_variant, "from future iterations.\n")
+        }
+    } else {
+        # Step 4: Update the list of obtained proxies
+        if (!is.null(all_proxies)) {
+            all_proxies <- rbind(all_proxies, vars_proxy)
+        } else {
+            all_proxies <- vars_proxy
+        }
+        
+        # Step 5: Save the newly obtained proxies to a file
+        output_file <- file.path(proxies_folder, paste0("Obtained_Proxies_Iteration_", iteration, ".csv"))
+        write.csv(vars_proxy, output_file, row.names = FALSE)
+    }
+    
+    # Optional: Safety check to avoid infinite loops
+    if (iteration >= max_iterations) {
+        warning("Maximum iterations reached. Exiting the loop.")
+        break
+    }
+}
+
+## ## ## also run for vars with no rsID
+vars_proxy3 <- LDproxy_batch(vars_unique_norsid$input, pop = "ALL", r2d = "r2", token = "5fec2771315b", append = FALSE, genome_build = "grch38")
+
+## ## ## 
+## ## ## 
+## ## ## -- -- -- -- -- -- -- -- -- now have all proxies for original variants
+## ## ## 
+## ## ## 
+
+##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  ##### ---- bind together proxies and filter for significant LD
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  
+##### ---- 
+
+head(getLD_wSNP)
+
+head(vars_unique_norsid)
+
+original_vars <- c(getLD_wSNP$SNP, vars_unique_norsid$input)
+
+# Define the directory containing the proxy files
+proxies_folder <- "~/proxies"
+
+# Get a list of all files ending in "_grch38.txt" in the proxies folder
+snp_files <- list.files(proxies_folder, pattern = "_grch38.txt$", full.names = TRUE)
+
+# Initialize an empty list to store data frames for each SNP
+proxy_list <- list()
+
+# Loop through each file
+for (file_path in snp_files) {
+  
+    # Extract the SNP name from the file path (before '_grch38.txt')
+    SNP <- sub("_grch38.txt$", "", basename(file_path))
+    
+    # Check if the SNP matches any value in original_vars
+    if (SNP %in% original_vars) {
+        
+        # Read the SNP data from the file
+        snp_data <- read.table(header = TRUE, dec = ".", file = file_path, sep = "\t")
+        
+        # Add a 'proxy' column with the SNP name
+        snp_data$proxy <- SNP
+        
+        # Reset the row names to be NULL
+        rownames(snp_data) <- NULL
+        
+        # Store the data frame in the list, keyed by the SNP name
+        proxy_list[[SNP]] <- snp_data
+    }
+}
+
+# Bind together all the results into a single data frame
+proxies <- bind_rows(proxy_list)
+
+
+# define significant LD as R2 >0.8
+snp_proxies = subset(proxies, R2>=0.8)
+snp_proxies <- snp_proxies %>% distinct(RS_Number, .keep_all = TRUE)
+names(snp_proxies)[names(snp_proxies) == "RS_Number"] <- "rsid"
+snp_proxies <- snp_proxies %>% separate_wider_delim(Coord, delim = ":", names = c("chromosome", "start"), too_few = "align_start", too_many = "merge")
+snp_proxies$chromosome <- str_remove(snp_proxies$chromosome, "chr")
+snp_proxies$Alleles <- str_remove(snp_proxies$Alleles, "\\(")
+snp_proxies$Alleles <- str_remove(snp_proxies$Alleles, "\\)")
+snp_proxies <- snp_proxies %>% separate_wider_delim(Alleles, delim = "/", names = c("ref", "alt"), too_few = "align_start", too_many = "merge")
+snp_proxies$varId <- paste(snp_proxies$chromosome, snp_proxies$start, sep = "_")
+snp_proxies$varId <- paste(snp_proxies$varId, snp_proxies$ref, sep = "_")
+snp_proxies$varId <- paste(snp_proxies$varId, snp_proxies$alt, sep = "_")
+snp_proxies$varId_dup <- snp_proxies$varId
+
+##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  ##### ---- Put proxies into VEP
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  
+##### ---- 
+
+## prep for insertion into VEP
+library(dplyr)
+
+# Separate the string by "_" into chromosome, position, ref, alt
+snp_proxies <- snp_proxies %>%
+  separate(varId, into = c("chromosome", "position", "ref", "alt"), sep = "_")
+snp_proxies$chromosome <- as.numeric(snp_proxies$chromosome)
+snp_proxies$position <- as.numeric(snp_proxies$position)
+
+## sort by chromosome and location
+snp_proxies <- snp_proxies %>% arrange(chromosome, position)
+
+
+# Make a new column for 'type'
+snp_proxies <- snp_proxies %>%
+  mutate(type = case_when(
+    ref != "-" & alt != "-" ~ "substitution",
+    alt=="-" ~ "deletion",
+    ref=="-" ~ "insertion"
+  ))
+
+# Create 'position', 'end', and modify accordingly
+snp_proxies <- snp_proxies %>%
+  dplyr::mutate(
+    position = as.numeric(position),
+    end = case_when(
+      type == "substitution" ~ position,
+      type == "insertion" ~ position + 1,
+      type == "deletion" ~ position - (nchar(ref))
+    )
+  )
+
+# Modify ref, alt, and create allele column
+snp_proxies <- snp_proxies %>%
+  mutate(
+    allele = paste(ref, alt, sep = "/")
+  )
+
+# Make a column called strand and fill with '+'
+snp_proxies$strand <- "+"
+
+snp_proxies_clone <- snp_proxies
+
+# Tidy the table
+snp_proxies <- snp_proxies %>% dplyr::select(chromosome, position, end, allele, strand, varId_dup)
+
+# write the table to manually paste into VEP
+fwrite(snp_proxies, "snp_proxies_for_VEP.txt", sep="\t")
+
+##### ---- 
+##### ---- run proxies through VEP mannually
+##### ----
+
+##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  ##### ---- make a table to match VEP variants to the sentinel/look-up variant
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  
+##### ---- 
+
+prox_to_sentinel = subset(snp_proxies_clone, select = c("proxy", "varId_dup", "rsid", "MAF", "Dprime", "R2"))
+colnames(prox_to_sentinel) <- c("look_up_rsid", "varId", "rsid", "MAF", "Dprime", "R2")
+
+# annotate with gene names
+names(vars_full_gene)[names(vars_full_gene) == "SNP"] <- "look_up_rsid"
+prox_to_sentinel <- left_join(prox_to_sentinel, vars_full_gene, by="look_up_rsid")
+names(prox_to_sentinel)[names(prox_to_sentinel) == "varId.x"] <- "varId"
+prox_to_sentinel <- left_join(prox_to_sentinel, vars_full_gene, by="varId")
+prox_to_sentinel$gene_lookup <- prox_to_sentinel$gene_lookup.x
+prox_to_sentinel <- prox_to_sentinel %>% mutate(gene_lookup = ifelse(is.na(gene_lookup), gene_lookup.y, gene_lookup))
+names(prox_to_sentinel)[names(prox_to_sentinel) == "look_up_rsid.x"] <- "look_up_rsid"
+prox_to_sentinel = subset(prox_to_sentinel, select=c("look_up_rsid", "gene_lookup", "varId", "rsid", "MAF", "Dprime", "R2"))
+
+# bind with main vars_unique table to make sure primary look-up variants aren't missed (and those that had no proxies)
+vars_proxbind = subset(vars_full_gene, select= c("look_up_rsid", "varId", "gene_lookup"))
+vars_proxbind$MAF <- as.numeric("")
+vars_proxbind$Dprime <- as.numeric("")
+vars_proxbind$R2 <- as.numeric("")
+
+# Filter out rows from vars_proxbind where varId is present in prox_to_sentinel
+filtered_vars_proxbind <- anti_join(vars_proxbind, prox_to_sentinel, by = "varId")
+
+# Combine the filtered vars_proxbind with prox_to_sentinel
+prox_to_sentinel <- bind_rows(vars_proxbind, prox_to_sentinel)
+prox_to_sentinel <- prox_to_sentinel %>% distinct()
+
+# bind with VEP look-up for variants with no rsID
+names(vars_unique_norsid)[names(vars_unique_norsid) == "SNP"] <- "look_up_rsid"
+vars_unique_norsid = subset(vars_unique_norsid, select= c("look_up_rsid", "varId", "gene_lookup"))
+vars_unique_norsid$rsid <- "-"
+vars_unique_norsid$MAF <- "-"
+vars_unique_norsid$Dprime <- "-"
+vars_unique_norsid$R2 <- "-"
+vars_unique_norsid = subset(vars_unique_norsid, select= c("look_up_rsid", "varId", "rsid", "MAF", "Dprime", "R2", "gene_lookup"))
+prox_to_sentinel <- rbind(prox_to_sentinel, vars_unique_norsid)
+
+# blank gene_lookup means we now have the rsid for that variant
+prox_to_sentinel = subset(prox_to_sentinel, gene_lookup !="")
+
+# blank rsid means the variant not present in reference panel
+prox_to_sentinel <- prox_to_sentinel %>% distinct()
+prox_to_sentinel = subset(prox_to_sentinel, select= c("varId", "look_up_rsid", "gene_lookup", "rsid", "Dprime", "R2"))
+colnames(prox_to_sentinel) <- c("varId", "look_up_rsid", "gene_lookup", "prox_rsid", "prox_Dprime", "prox_R2")
+
+## need to remove duplicates where the proxy is the look-up variant
+prox_to_sentinel <- prox_to_sentinel %>% mutate(match = ifelse(look_up_rsid == prox_rsid, "Yes", "No"))
+prox_to_sentinel <- prox_to_sentinel %>% distinct()
+#prox_to_sentinel = subset(prox_to_sentinel, match!="Yes") # this would remove many of the original variants
+#prox_to_sentinel <- prox_to_sentinel %>% select(-match)
+
+
+
+##
+##### --- run VEP online for both original list of variants and for their proxies (R2 >.8)
+##
+
+##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  ##### ---- filter all the VEP data to a single unique variant
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  
+##### ---- 
+
+# import proxies VEP data
+VEP_vars <- fread("VEP_vars_4Oct24.txt")
+names(VEP_vars)[names(VEP_vars) == "#Uploaded_variation"] <- "varId"
+VEP_proxies <- fread("VEP_proxies_4Oct24.txt")
+names(VEP_proxies)[names(VEP_proxies) == "#Uploaded_variation"] <- "varId"
+VEP_data_full <- rbind(VEP_vars, VEP_proxies)
+
+# Convert BIOTYPE into a factor with specified levels
+biotype_levels <- c("nonsense_mediated_decay", "protein_coding")
+VEP_data_full$BIOTYPE <- factor(VEP_data_full$BIOTYPE, levels = biotype_levels)
+
+# Convert IMPACT into a factor with specified levels
+impact_levels <- c("HIGH", "MODERATE", "MODIFIER", "LOW")
+VEP_data_full$IMPACT <- factor(VEP_data_full$IMPACT, levels = impact_levels)
+
+# Convert am_class into a factor with specified levels
+am_class_levels <- c("likely_pathogenic", "ambiguous", "likely_benign")
+VEP_data_full$am_class <- factor(VEP_data_full$am_class, levels = am_class_levels)
+
+# derive rsid for the new variant
+VEP_data_full <- VEP_data_full %>% separate_wider_delim(Existing_variation, delim = ",", names = c("rsid", "other1", "other2"), too_few = "align_start", too_many = "merge")
+
+# get the protein coding variant
+VEP_data_full <- VEP_data_full %>% separate_wider_delim(HGVSp, delim = ":", names = c("protein", "Variant"), too_few = "align_start", too_many = "merge")
+VEP_data_full <- VEP_data_full %>% separate_wider_delim(Feature, delim = ".", names = c("transcript", "version"), too_few = "align_start", too_many = "merge")
+VEP_data_full$version <- as.numeric(VEP_data_full$version)
+
+# pull gnomad exome frequency if 1000G is blank
+VEP_data_full$EAF <- VEP_data_full$AF
+VEP_data_full <- VEP_data_full %>% mutate(EAF = ifelse(AF == "-", gnomADe_AF, AF))
+
+# pull gnomad genome frequency if both blank
+VEP_data_full <- VEP_data_full %>% mutate(EAF = ifelse(EAF == "-", gnomADg_AF, EAF))
+
+# simplify the table
+VEP_data_full = subset(VEP_data_full, select = c("varId", "HGVSc", "rsid", "SYMBOL", "Consequence", "IMPACT", "Variant", "version", "Protein_position", "EAF", "SIFT", "PolyPhen", "am_class", "CADD_PHRED"))
+
+# fix how synonymous variants appear
+VEP_data_full$Variant <- str_replace_all(VEP_data_full$Variant, "%3D", "=")
+
+## filter for duplicates based on old transcript versions
+VEP_data_full <- VEP_data_full %>% group_by(varId, SYMBOL) %>% arrange(desc(version)) %>% slice(1)
+
+### remove duplicates where one is in a transcript and the other is intergenic - removing the intergenic one
+library(dplyr)
+# Step 1: Identify duplicated varId
+duplicated_varId <- VEP_data_full %>%
+  group_by(varId) %>%
+  mutate(duplicated_varId = n() > 1)
+# Step 2: Filter rows based on conditions
+filtered_rows <- duplicated_varId %>%
+  filter(!(HGVSc == "-" & duplicated_varId) | HGVSc != "-")
+# Step 3: Combine filtered rows with non-duplicated rows
+result <- bind_rows(
+  filtered_rows %>% filter(!duplicated_varId),
+  filtered_rows %>% filter(duplicated_varId)
+)
+# Remove the helper column
+VEP_data_full <- result %>% select(-duplicated_varId)
+
+
+### remove duplicates where one has an annotated gene and the other doesn't
+library(dplyr)
+# Step 1: Identify duplicated varId
+duplicated_varId <- VEP_data_full %>%
+  group_by(varId) %>%
+  mutate(duplicated_varId = n() > 1)
+# Step 2: Filter rows based on conditions
+filtered_rows <- duplicated_varId %>%
+  filter(!(SYMBOL == "-" & duplicated_varId) | SYMBOL != "-")
+# Step 3: Combine filtered rows with non-duplicated rows
+result <- bind_rows(
+  filtered_rows %>% filter(!duplicated_varId),
+  filtered_rows %>% filter(duplicated_varId)
+)
+# Remove the helper column
+VEP_data_full <- result %>% select(-duplicated_varId)
+
+## still have a few duplicates due to old transcript versions
+VEP_data_full <- VEP_data_full %>% group_by(varId) %>% arrange(desc(version)) %>% slice(1)
+
+## now all are unique
+
+##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  ##### ---- annotate the full list of variants (or their proxies) with VEP data
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  
+##### ---- 
+
+# bind look-up rsid to the VEP data
+VEP_data_full <- left_join(VEP_data_full, prox_to_sentinel, by="varId")
+VEP_data_full <- VEP_data_full %>% distinct()
+fwrite(VEP_data_full, "VEP_data_full.txt", sep="\t")
+
+# filter for variants in genes of interest because only looking for coding/major functional protein variants
+VEP_data <- VEP_data_full[VEP_data_full$SYMBOL %in% MonoGen_genes, ]
+
+# make the table pretty
+VEP_final <- VEP_data
+VEP_final$Mutation <- paste(VEP_final$SYMBOL, VEP_final$Variant, sep=" (")
+VEP_final$Mutation <- paste(VEP_final$Mutation, VEP_final$Consequence, sep="), ")
+VEP_final$Mutation <- str_remove_all(VEP_final$Mutation, "-\\s*\\(NA\\),?")
+VEP_final$Mutation <- str_remove_all(VEP_final$Mutation, "\\s*\\(NA\\)?")
+
+VEP_final = subset(VEP_final, select=c("look_up_rsid", "varId", "Mutation", "EAF", "CADD_PHRED", "prox_rsid", "prox_Dprime", "prox_R2"))
+VEP_final <- VEP_final %>% distinct()
+
+# remove duplicates
+VEP_final_clean <- VEP_final %>%
+  group_by(varId) %>%
+  arrange(is.na(prox_Dprime), .by_group = TRUE) %>%  # Prioritize NA values
+  slice(1) %>%  # Keep the first row per group (which will be the one with NA if present)
+  ungroup()
+
+##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ---- 
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  ##### ---- bind VEP data with original associations table
+##### ---- ##### ---- ##### ----  ##### ----  ##### ----  
+##### ---- 
+
+res_annot <- left_join(vars_full, VEP_final_clean, by="varId")
+res_annot <- res_annot %>% distinct()
+res_annot <- res_annot %>% arrange(gene_lookup, phenotype, pValue)
+fwrite(res_annot, "res_annot.txt", sep="\t")
+
+save.image("~/Monogen_Oct24.RData")
+
+
+##### ---- ##### ---- ##### ---- Annotate unique variants with eQTL data
+##### ---- ##### ----
+
+# get liver GTEx data from EBI
+wget ftp://ftp.ebi.ac.uk/pub/databases/spot/eQTL/sumstats/QTS000015/QTD000266/QTD000266.all.tsv.gz
+gunzip QTD000266.all.tsv.gz
+
+eqtls_all <- fread("QTD000266.all.tsv")
+eqtls_all_filt <- eqtls_all %>% dplyr::filter(pvalue <=0.1)
+eqtls_all_filt$variant <- str_remove(eqtls_all_filt$variant, "chr")
+names(eqtls_all_filt)[names(eqtls_all_filt) == "variant"] <- "varId"
+
+## filter eqtls for variants of interest
+eqtls_all_filt1 <- eqtls_all_filt[eqtls_all_filt$varId %in% res_annot$varId, ]
+eqtls_all_filt1 <- eqtls_all_filt1 %>% dplyr::distinct(.keep_all = TRUE)
+eqtls_all_filt1 <- eqtls_all_filt1 %>% dplyr::filter(pvalue <=0.05)
+fwrite(eqtls_all_filt1,"eqtls_all_filt1.txt", sep="\t")
+rm(eqtls_all)
+
+# need to convert from ENSG to gene name
+library(biomaRt)
+ensembl <- useMart("ensembl")
+datasets <- listDatasets(ensembl)
+ensembl_dt <- useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+filters <- listFilters(ensembl_dt) #for inputs
+attributes <- listAttributes(ensembl_dt) #search through for outputs
+myAttributes <- c("external_gene_name", "ensembl_gene_id")
+eqtl_genes<- getBM(attributes = myAttributes, filters =  "ensembl_gene_id", values = eqtls_all_filt1$molecular_trait_id, mart = ensembl_dt)
+names(eqtls_all_filt1)[names(eqtls_all_filt1) == "molecular_trait_id"] <- "ensembl_gene_id"
+eqtls_all_filt1 <- merge(eqtls_all_filt1, eqtl_genes, by = "ensembl_gene_id")
+
+# drop eqtls with no gene name
+eqtls_all_filt2 <- eqtls_all_filt1 %>% dplyr::filter(external_gene_name.x !="")
+eqtls_all_filt2 = subset(eqtls_all_filt2, select = -c(external_gene_name.y))
+names(eqtls_all_filt2)[names(eqtls_all_filt2) == "external_gene_name.x"] <- "external_gene_name"
+
+# create an annotation column:
+library(dplyr)
+
+# Custom function to round p-values to two significant figures
+round_pvalue <- function(p) {
+    ifelse(p == 0, "0", formatC(p, format = "e", digits = 1))
+}
+
+eqtls_all_filt2 <- eqtls_all_filt2 %>%
+    mutate(annotation = paste(
+        external_gene_name, "(",
+        round(beta, 1), 
+        paste0("(", round(se, 2), ")"),
+        ", p=", round_pvalue(pvalue), 
+        ")",  # Close the parenthesis separately
+        sep = " "
+    )) %>% 
+    mutate(annotation = gsub(" \\)", ")", annotation))  %>% 
+mutate(annotation = gsub(" \\,", ",", annotation))  %>%
+    mutate(annotation = gsub("\\p= ", "p=", annotation))   %>%
+    mutate(annotation = gsub("\\( ", "(", annotation))  # Replace "( " with "("
+
+# put monogen genes first
+eqtls_all_filt2_ordered <- eqtls_all_filt2 %>%
+  group_by(varId) %>%
+  # Create a custom sort order: 1 if gene is in MonoGen_genes, 2 otherwise
+  arrange(factor(external_gene_name, levels = c(MonoGen_genes, setdiff(external_gene_name, MonoGen_genes)))) %>%
+  # Concatenate the annotation strings for each varId
+  summarize(annotation_combined = paste(annotation, collapse = ", ")) %>%
+  ungroup()
+
+rm(eqtls_all_filt)
+
+# update annotation table
+res_annot <- left_join(res_annot, eqtls_all_filt2_ordered, by="varId")
+fwrite(res_annot, "res_annot.txt", sep="\t")
+
+res_annot_noPNP = subset(res_annot, gene_lookup != "PNPLA3") ##
+fwrite(res_annot_noPNP, "res_annot_noPNP.txt", sep="\t")
+
+save.image("~/Monogen_Feb25.RData")
+
+##### ---- 
+##### ---- 
+##### ---- ##### ----
+##### ---- ##### ---- ##### ---- External cohort validation
+##### ---- ##### ----
+##### ---- 
+##### ---- 
+
+
+
+##### ---- 
+##### ---- all cause cirrhosis (Ghouse) in GRCh37
+##### ---- 
+
+setwd("~/External validation data")
+Ghouse <- fread("GCST90319877_euro.tsv")
+setwd("~/MonogenLiveR")
+
+## filter for sig vars (after dropping PNPLA3 from res variants)
+res_annot_noPNP = subset(res_annot, gene_lookup != "PNPLA3")
+# get effect allele as separate column
+res_annot_noPNP$varId_dup <- res_annot_noPNP$varId
+res_annot_noPNP <- res_annot_noPNP %>% separate_wider_delim(varId_dup, delim = "_", names = c("chr", "pos_38_dup", "ref", "effect_allele_JPM"), too_few = "align_start")
+res_annot_var =subset(res_annot_noPNP, select=c("varId", "SNP", "effect_allele_JPM"))
+
+# try merging using just SNP id
+Ghouse_filt <- Ghouse[Ghouse$rsid %in% res_annot_noPNP$SNP, ]
+names(Ghouse_filt)[names(Ghouse_filt) == "rsid"] <- "SNP"
+
+# check direction
+Ghouse_filt <- merge(Ghouse_filt, res_annot_var, by="SNP")
+# flip the betas and EAF as needed
+
+library(dplyr)
+
+Ghouse_filt <- Ghouse_filt %>% 
+  mutate(beta_new = ifelse(effect_allele == effect_allele_JPM, beta, -1*beta),
+         EAF_new = ifelse(effect_allele == effect_allele_JPM, effect_allele_frequency, 1 - effect_allele_frequency))
+
+Ghouse_filt$beta_new <- round(Ghouse_filt$beta_new, digits=3)
+Ghouse_filt$standard_error <- round(Ghouse_filt$standard_error, digits=3)
+
+# make a summary table 
+
+Ghouse_filt$Ghouse_betaSE <- paste(Ghouse_filt$beta_new, Ghouse_filt$standard_error, sep = " (")
+Ghouse_filt$Ghouse_betaSE <- paste(Ghouse_filt$Ghouse_betaSE, "", sep = ")")
+names(Ghouse_filt)[names(Ghouse_filt) == "p_value"] <- "Ghouse_p_value"
+Ghouse_filt_subset <- subset(Ghouse_filt, select = c("SNP", "Ghouse_betaSE", "Ghouse_p_value"))
+
+
+
+
+##### ---- 
+##### ---- all cause cirrhosis (Emdin) in GRCh37
+##### ---- 
+
+setwd("~/External validation data")
+Emdin <- fread("cirrhosis.emdingastro2021.txt")
+setwd("~/MonogenLiveR")
+
+# try merging using just SNP id
+Emdin_filt <- Emdin[Emdin$SNP %in% res_annot_noPNP$SNP, ]
+
+
+# check direction
+Emdin_filt <- merge(Emdin_filt, res_annot_var, by="SNP")
+# flip the betas and EAF as needed
+
+Emdin_filt <- Emdin_filt %>% 
+  mutate(beta_new = ifelse(EA == effect_allele_JPM, Effect, -1*Effect),
+         EAF_new = ifelse(EA == effect_allele_JPM, FRQ, 1 - FRQ))
+
+Emdin_filt$beta_new <- round(Emdin_filt$beta_new, digits=3)
+Emdin_filt$StdErr <- round(Emdin_filt$StdErr, digits=3)
+
+# make a summary table 
+
+Emdin_filt$Emdin_betaSE <- paste(Emdin_filt$beta_new, Emdin_filt$StdErr, sep = " (")
+Emdin_filt$Emdin_betaSE <- paste(Emdin_filt$Emdin_betaSE, "", sep = ")")
+names(Emdin_filt)[names(Emdin_filt) == "P-value"] <- "Emdin_p_value"
+Emdin_filt <- Emdin_filt %>% distinct()
+Emdin_filt_subset <- subset(Emdin_filt, select = c("SNP", "Emdin_betaSE", "Emdin_p_value"))
+
+
+
+##### ---- 
+##### ---- all cause cirrhosis (Chen) - unpublished
+##### ---- 
+
+setwd("~/External validation data")
+ChenCirr <- fread("Chen_cirrhosis_snps_flipped_withN.txt")
+setwd("~/MonogenLiveR")
+
+# try merging using just SNP id
+ChenCirr_filt <- ChenCirr[ChenCirr$RSID %in% res_annot_noPNP$SNP, ]
+names(ChenCirr_filt)[names(ChenCirr_filt) == "RSID"] <- "SNP"
+
+# check direction
+ChenCirr_filt <- merge(ChenCirr_filt, res_annot_var, by="SNP")
+# flip the betas and EAF as needed
+
+ChenCirr_filt <- ChenCirr_filt %>% 
+  mutate(beta_new = ifelse(A1 == effect_allele_JPM, BETA, -1*BETA),
+         EAF_new = ifelse(A1 == effect_allele_JPM, A1FREQ, 1 - A1FREQ))
+
+ChenCirr_filt$beta_new <- round(ChenCirr_filt$beta_new, digits=3)
+ChenCirr_filt$SE <- round(ChenCirr_filt$SE, digits=3)
+
+# make a summary table 
+
+ChenCirr_filt$ChenCirr_betaSE <- paste(ChenCirr_filt$beta_new, ChenCirr_filt$SE, sep = " (")
+ChenCirr_filt$ChenCirr_betaSE <- paste(ChenCirr_filt$ChenCirr_betaSE, "", sep = ")")
+names(ChenCirr_filt)[names(ChenCirr_filt) == "P"] <- "ChenCirr_p_value"
+ChenCirr_filt <- ChenCirr_filt %>% distinct()
+ChenCirr_filt_subset <- subset(ChenCirr_filt, select = c("SNP", "ChenCirr_betaSE", "ChenCirr_p_value"))
+
+
+##### ---- 
+##### ---- PBC (Cordell)
+##### ---- 
+
+setwd("~/External validation data")
+Cordell <- fread("Cordell_PBC_34033851-GCST90061440-EFO_1001486.h.tsv")
+setwd("~/MonogenLiveR")
+
+# try merging using just SNP id
+Cordell_filt <- Cordell[Cordell$variant_id %in% res_annot_noPNP$SNP, ]
+names(Cordell_filt)[names(Cordell_filt) == "variant_id"] <- "SNP"
+
+# check direction
+Cordell_filt <- merge(Cordell_filt, res_annot_var, by="SNP")
+# flip the betas and EAF as needed
+
+Cordell_filt <- Cordell_filt %>% mutate(beta_new = ifelse(hm_effect_allele == effect_allele_JPM, hm_beta, -1*hm_beta))
+
+Cordell_filt$beta_new <- round(Cordell_filt$beta_new, digits=3)
+Cordell_filt$standard_error <- round(Cordell_filt$standard_error, digits=3)
+
+# make a summary table 
+
+Cordell_filt$Cordell_betaSE <- paste(Cordell_filt$beta_new, Cordell_filt$standard_error, sep = " (")
+Cordell_filt$Cordell_betaSE <- paste(Cordell_filt$Cordell_betaSE, "", sep = ")")
+names(Cordell_filt)[names(Cordell_filt) == "p_value"] <- "Cordell_p_value"
+Cordell_filt <- Cordell_filt %>% distinct()
+Cordell_filt_subset <- subset(Cordell_filt, select = c("SNP", "Cordell_betaSE", "Cordell_p_value"))
+
+
+##### ---- 
+##### ---- PSC (Ji)
+##### ---- 
+
+setwd("~/External validation data")
+Ji <- fread("PSC_27992413-GCST004030-EFO_0004268.h.tsv")
+setwd("~/MonogenLiveR")
+
+# try merging using just SNP id
+Ji_filt <- Ji[Ji$variant_id %in% res_annot_noPNP$SNP, ]
+names(Ji_filt)[names(Ji_filt) == "variant_id"] <- "SNP"
+
+
+# check direction
+Ji_filt <- merge(Ji_filt, res_annot_var, by="SNP")
+# flip the betas and EAF as needed
+
+# get beta from OR
+Ji_filt$beta <- log(Ji_filt$odds_ratio)
+
+Ji_filt <- Ji_filt %>% 
+  mutate(beta_new = ifelse(effect_allele == effect_allele_JPM, beta, -1*beta),
+         EAF_new = ifelse(effect_allele == effect_allele_JPM, effect_allele_frequency, 1 - effect_allele_frequency))
+
+Ji_filt$beta_new <- round(Ji_filt$beta_new, digits=3)
+
+
+# make a summary table 
+
+Ji_filt$Ji_betaSE <- paste(Ji_filt$beta_new, Ji_filt$standard_error, sep = " (")
+Ji_filt$Ji_betaSE <- paste(Ji_filt$Ji_betaSE, "", sep = ")")
+names(Ji_filt)[names(Ji_filt) == "p_value"] <- "Ji_p_value"
+Ji_filt <- Ji_filt %>% distinct()
+Ji_filt_subset <- subset(Ji_filt, select = c("SNP", "Ji_betaSE", "Ji_p_value"))
+
+##### ---- 
+##### ---- NAFLD (ChenNAFLD)
+##### ---- 
+
+setwd("~/External validation data")
+ChenNAFLD <- fread("GCST90271622.tsv.gz")
+setwd("~/MonogenLiveR")
+
+# try merging using just SNP id
+ChenNAFLD_filt <- ChenNAFLD[ChenNAFLD$rsid %in% res_annot_noPNP$SNP, ]
+names(ChenNAFLD_filt)[names(ChenNAFLD_filt) == "rsid"] <- "SNP"
+
+
+# check direction
+ChenNAFLD_filt <- merge(ChenNAFLD_filt, res_annot_var, by="SNP")
+# flip the betas and EAF as needed
+
+# get beta from OR
+ChenNAFLD_filt <- ChenNAFLD_filt %>% 
+  mutate(beta_new = ifelse(effect_allele == effect_allele_JPM, beta, -1*beta),
+         EAF_new = ifelse(effect_allele == effect_allele_JPM, effect_allele_frequency, 1 - effect_allele_frequency))
+
+ChenNAFLD_filt$beta_new <- round(ChenNAFLD_filt$beta_new, digits=3)
+
+
+# make a summary table 
+
+ChenNAFLD_filt$ChenNAFLD_betaSE <- paste(ChenNAFLD_filt$beta_new, ChenNAFLD_filt$standard_error, sep = " (")
+ChenNAFLD_filt$ChenNAFLD_betaSE <- paste(ChenNAFLD_filt$ChenNAFLD_betaSE, "", sep = ")")
+names(ChenNAFLD_filt)[names(ChenNAFLD_filt) == "p_value"] <- "ChenNAFLD_p_value"
+ChenNAFLD_filt <- ChenNAFLD_filt %>% distinct()
+ChenNAFLD_filt_subset <- subset(ChenNAFLD_filt, select = c("SNP", "ChenNAFLD_betaSE", "ChenNAFLD_p_value"))
+
+# make a (blank) validation sumtab
+val_sumtab <- subset(res_annot_noPNP, select = c("gene_lookup", "varId", "SNP"))
+val_sumtab <- merge(val_sumtab, Cordell_filt_subset, by="SNP", all=TRUE)
+val_sumtab <- merge(val_sumtab, ChenCirr_filt_subset, by="SNP", all=TRUE)
+val_sumtab <- merge(val_sumtab, Emdin_filt_subset, by="SNP", all=TRUE)
+val_sumtab <- merge(val_sumtab, Ghouse_filt_subset, by="SNP", all=TRUE)
+val_sumtab <- merge(val_sumtab, Ji_filt_subset, by="SNP", all=TRUE)
+val_sumtab <- merge(val_sumtab, ChenNAFLD_filt_subset, by="SNP", all=TRUE)
+val_sumtab <- val_sumtab %>% distinct()
+val_sumtab <- val_sumtab %>% mutate(ChenNAFLD_dir = if_else(ChenNAFLD_betaSE =="1 (1)", "+", "-"))
+val_sumtab = subset(val_sumtab, select = -c(ChenNAFLD_betaSE))
+
+#drop large files
+rm(Ghouse)
+rm(Emdin)
+rm(ChenNAFLD)
+rm(Cordell)
+rm(ChenCirr)
+rm(Ji)
+
+# drop where all rows are blank
+val_sumtab <- val_sumtab %>%
+  filter(if_any(c("Ghouse_betaSE", "Ghouse_p_value", "Emdin_betaSE", 
+                  "Emdin_p_value", "ChenCirr_betaSE", "ChenCirr_p_value", 
+                  "Cordell_betaSE", "Cordell_p_value", "Ji_betaSE", 
+                  "Ji_p_value", "ChenNAFLD_dir", "ChenNAFLD_p_value"), ~ !is.na(.)))
+
+val_sumtab <- val_sumtab %>% distinct()
+
+# write full table
+fwrite(val_sumtab, "~/Output/val_sumtab.txt", sep="\t")
+
+val_sumtab <- val_sumtab %>% mutate(PBC_dir = if_else(Cordell_betaSE >=0, "+", "-"))
+val_sumtab <- val_sumtab %>% mutate(PBC_p = if_else(Cordell_p_value <=0.05, round_pvalue(Cordell_p_value), ""))
+val_sumtab$PBC_annot <- paste("PBC: ", val_sumtab$PBC_dir, sep = "")
+val_sumtab$PBC_annot <- paste(val_sumtab$PBC_annot, val_sumtab$PBC_p, sep = " (")
+val_sumtab$PBC_annot <- paste(val_sumtab$PBC_annot, ")", sep = "")
+val_sumtab <- val_sumtab %>% mutate(PBC_annot = if_else(PBC_p =="", "", PBC_annot))
+
+val_sumtab <- val_sumtab %>% mutate(Cirrhosis1_dir = if_else(Ghouse_betaSE >=0, "+", "-"))
+val_sumtab <- val_sumtab %>% mutate(Cirrhosis1_p = if_else(Ghouse_p_value <=0.05, round_pvalue(Ghouse_p_value), ""))
+val_sumtab$Cirrhosis1_annot <- paste("Cirrhosis1: ", val_sumtab$Cirrhosis1_dir, sep = "")
+val_sumtab$Cirrhosis1_annot <- paste(val_sumtab$Cirrhosis1_annot, val_sumtab$Cirrhosis1_p, sep = " (")
+val_sumtab$Cirrhosis1_annot <- paste(val_sumtab$Cirrhosis1_annot, ")", sep = "")
+val_sumtab <- val_sumtab %>% mutate(Cirrhosis1_annot = if_else(Cirrhosis1_p =="", "", Cirrhosis1_annot))
+
+val_sumtab <- val_sumtab %>% mutate(Cirrhosis2_dir = if_else(Emdin_betaSE >=0, "+", "-"))
+val_sumtab <- val_sumtab %>% mutate(Cirrhosis2_p = if_else(Emdin_p_value <=0.05, round_pvalue(Emdin_p_value), ""))
+val_sumtab$Cirrhosis2_annot <- paste("Cirrhosis2: ", val_sumtab$Cirrhosis2_dir, sep = "")
+val_sumtab$Cirrhosis2_annot <- paste(val_sumtab$Cirrhosis2_annot, val_sumtab$Cirrhosis2_p, sep = " (")
+val_sumtab$Cirrhosis2_annot <- paste(val_sumtab$Cirrhosis2_annot, ")", sep = "")
+val_sumtab <- val_sumtab %>% mutate(Cirrhosis2_annot = if_else(Cirrhosis2_p =="", "", Cirrhosis2_annot))
+
+val_sumtab <- val_sumtab %>% mutate(Cirrhosis3_dir = if_else(ChenCirr_betaSE >=0, "+", "-"))
+val_sumtab <- val_sumtab %>% mutate(Cirrhosis3_p = if_else(ChenCirr_p_value <=0.05, round_pvalue(ChenCirr_p_value), ""))
+val_sumtab$Cirrhosis3_annot <- paste("Cirrhosis3: ", val_sumtab$Cirrhosis3_dir, sep = "")
+val_sumtab$Cirrhosis3_annot <- paste(val_sumtab$Cirrhosis3_annot, val_sumtab$Cirrhosis3_p, sep = " (")
+val_sumtab$Cirrhosis3_annot <- paste(val_sumtab$Cirrhosis3_annot, ")", sep = "")
+val_sumtab <- val_sumtab %>% mutate(Cirrhosis3_annot = if_else(Cirrhosis3_p =="", "", Cirrhosis3_annot))
+
+val_sumtab <- val_sumtab %>% mutate(PSC_dir = if_else(Ji_betaSE >=0, "+", "-"))
+val_sumtab <- val_sumtab %>% mutate(PSC_p = if_else(Ji_p_value <=0.05, round_pvalue(Ji_p_value), ""))
+val_sumtab$PSC_annot <- paste("PSC: ", val_sumtab$PSC_dir, sep = "")
+val_sumtab$PSC_annot <- paste(val_sumtab$PSC_annot, val_sumtab$PSC_p, sep = " (")
+val_sumtab$PSC_annot <- paste(val_sumtab$PSC_annot, ")", sep = "")
+val_sumtab <- val_sumtab %>% mutate(PSC_annot = if_else(PSC_p =="", "", PSC_annot))
+
+val_sumtab <- val_sumtab %>% mutate(MASLD_dir =ChenNAFLD_dir)
+val_sumtab <- val_sumtab %>% mutate(MASLD_p = if_else(ChenNAFLD_p_value <=0.05, round_pvalue(ChenNAFLD_p_value), ""))
+val_sumtab$MASLD_annot <- paste("MASLD: ", val_sumtab$MASLD_dir, sep = "")
+val_sumtab$MASLD_annot <- paste(val_sumtab$MASLD_annot, val_sumtab$MASLD_p, sep = " (")
+val_sumtab$MASLD_annot <- paste(val_sumtab$MASLD_annot, ")", sep = "")
+val_sumtab <- val_sumtab %>% mutate(MASLD_annot = if_else(MASLD_p =="", "", MASLD_annot))
+
+val_sumtab$val_annot = paste(val_sumtab$Cirrhosis1_annot, val_sumtab$Cirrhosis2_annot, sep=", ")
+val_sumtab$val_annot = paste(val_sumtab$val_annot, val_sumtab$Cirrhosis3_annot, sep=", ")
+val_sumtab$val_annot = paste(val_sumtab$val_annot, val_sumtab$MASLD_annot, sep=", ")
+val_sumtab$val_annot = paste(val_sumtab$val_annot, val_sumtab$PSC_annot, sep=", ")
+val_sumtab$val_annot = paste(val_sumtab$val_annot, val_sumtab$PBC_annot, sep=", ")
+
+# tidy the annotation column up
+
+val_sumtab$val_annot <- val_sumtab$val_annot %>%
+str_replace_all("\\bNA,?\\b", "") %>% str_replace_all(",\\s*,+", ",") %>% str_replace_all("^\\s*,+", "") %>% str_replace_all(",+\\s*$", "")
+
+
+# make a summary tab with top variants
+val_sig = 0.05 #/nrow(val_sumtab)
+val_sig_stringent=0.05/nrow(val_sumtab)
+
+val_sumtab_top <- val_sumtab %>%
+  filter(if_any(c("Ghouse_p_value", "Emdin_p_value", "ChenCirr_p_value", "Cordell_p_value", "Ji_p_value", "ChenNAFLD_p_value"), ~ . < val_sig))
+val_sumtab_top <- val_sumtab_top %>% arrange(gene_lookup, SNP)
+val_sumtab_top <- val_sumtab_top %>% distinct(SNP, gene_lookup, .keep_all = TRUE)
+
+fwrite(val_sumtab_top, "~/Output/val_sumtab_top.txt", sep="\t")
+
+val_sumtab_stringent <- val_sumtab %>%
+  filter(if_any(c("Ghouse_p_value", "Emdin_p_value", "ChenCirr_p_value", "Cordell_p_value", "Ji_p_value", "ChenNAFLD_p_value"), ~ . < val_sig_stringent))
+val_sumtab_stringent <- val_sumtab_stringent %>% arrange(gene_lookup, SNP)
+val_sumtab_stringent <- val_sumtab_stringent %>% distinct(SNP, gene_lookup, .keep_all = TRUE)
+
+fwrite(val_sumtab_stringent, "~/Output/val_sumtab_stringent.txt", sep="\t")
+
+
+
+
+##### ---- 
+##### ---- 
+##### ---- ##### ---- Some variants are missing EAF
+##### ---- 
+##### ---- 
+
+#complete list of rsIDs
+res_annot_noPNP <- res_annot_noPNP %>% mutate(SNP = ifelse(SNP == "", look_up_rsid, SNP))
+
+#just a few rsIDs not found so manually adding
+res_annot_noPNP <- res_annot_noPNP %>% mutate(SNP = ifelse(varId =="11_119086678_A_T", "rs141949189", SNP))
+res_annot_noPNP <- res_annot_noPNP %>% mutate(SNP = ifelse(varId == "18_57655270_C_T", "rs12968116", SNP))
+res_annot_noPNP <- res_annot_noPNP %>% mutate(SNP = ifelse(varId == "9_114324932_T_A", "rs10982154", SNP))
+
+#output list of rsID
+fwrite(res_annot_noPNP, "~/Output/res_annot_noPNP.txt", sep="\t")
+
+# use UCSC Table browser to get EAFs
+library(readxl)
+rsIDs_EAF <- read_excel("~/rsIDs_EAF_v2.xlsx")
+res_annot_noPNP <- merge(res_annot_noPNP, rsIDs_EAF, by="SNP", all.x = TRUE)
+
+res_annot_noPNP = subset(res_annot_noPNP, select = -c(EAF.x))
+names(res_annot_noPNP)[names(res_annot_noPNP) == "EAF.y"] <- "EAF"
+res_annot_noPNP  <- res_annot_noPNP %>% distinct()
+fwrite(res_annot_noPNP, "~/Output/res_annot_noPNP.txt", sep="\t")
+
+##### ---- 
+##### ---- 
+##### ---- ##### ----
+##### ---- ##### ---- ##### ---- Mendelian randomisation
+##### ---- ##### ----
+##### ---- 
+##### ---- 
+
+save.image("~/Monogen_Feb25.RData")
+
+### ieugwasr token
+#OPENGWAS_JWT=eyJhbGciOiJSUzI1NiIsImtpZCI6ImFwaS1qd3QiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJhcGkub3Blbmd3YXMuaW8iLCJhdWQiOiJhcGkub3Blbmd3YXMuaW8iLCJzdWIiOiJqLnAubWFubkBiaGFtLmFjLnVrIiwiaWF0IjoxNzM5ODI2MjY0LCJleHAiOjE3NDEwMzU4NjR9.Xiu8asYRHBKrDHWFEjwUm5V28zsxO-QG2BH_Vczblanw7ROWv8cFtUhzS5S6I0Rj7aoEZJXpyZCc30KN0oxo-x6iui7I2i3kmNVQHlaqXxYtTV3BOVgAAZNkqmEwUP6Hoj7emHQKEZ5K334vw7MIDRrCMExjN6oLEu40x-Xyis1j-cTBMzPmO6GIzHtPCVAdkoUmfZ2flhXiAOaUq-YneUi51fESJTgnCPMkch_wlrlnQQFpuxZDujBmXbU8niB87dVd3xPK40ZuMHIf5sz0pBaO2Mw4oNplfih0vV0Xjj-iOStTnQwocZb1HzvTakY4Bj96AODaSVbQwaTDgV0ShQ
+
+#file.edit("~/.Renviron")
+
+## try running MR 
+# prep files (filtering by phenotype)
+
+# ALT
+MR_ALT = subset(res_annot_noPNP, phenotype=="ALT")
+MR_ALT = subset(MR_ALT, select=c(SNP, beta, stdErr, effect_allele_JPM, ref, EAF, pValue, phenotype, n, gene_lookup))
+colnames(MR_ALT) <- c("SNP", "beta.exposure", "se.exposure", "effect_allele.exposure", "other_allele.exposure", "eaf.exposure", "pval.exposure", "phenotype.exposure", "samplesize.exposure", "gene.exposure")
+MR_ALT <- MR_ALT %>% filter(if_all(c("SNP", "beta.exposure", "se.exposure", "effect_allele.exposure"), ~ !is.na(.)))
+MR_ALT = subset(MR_ALT, SNP !="")
+MR_ALT$id.exposure <- "ALT_vars"
+MR_ALT$exposure <- "ALT"
+
+# ALP
+MR_ALP = subset(res_annot_noPNP, phenotype=="ALP")
+MR_ALP = subset(MR_ALP, select=c(SNP, beta, stdErr, effect_allele_JPM, ref, EAF, pValue, phenotype, n, gene_lookup))
+colnames(MR_ALP) <- c("SNP", "beta.exposure", "se.exposure", "effect_allele.exposure", "other_allele.exposure", "eaf.exposure", "pval.exposure", "phenotype.exposure", "samplesize.exposure", "gene.exposure")
+MR_ALP <- MR_ALP %>% filter(if_all(c("SNP", "beta.exposure", "se.exposure", "effect_allele.exposure"), ~ !is.na(.)))
+MR_ALP = subset(MR_ALP, SNP !="")
+MR_ALP$id.exposure <- "ALP_vars"
+MR_ALP$exposure <- "ALP"
+
+# GGT
+MR_GGT = subset(res_annot_noPNP, phenotype=="GGT")
+MR_GGT = subset(MR_GGT, select=c(SNP, beta, stdErr, effect_allele_JPM, ref, EAF, pValue, phenotype, n, gene_lookup))
+colnames(MR_GGT) <- c("SNP", "beta.exposure", "se.exposure", "effect_allele.exposure", "other_allele.exposure", "eaf.exposure", "pval.exposure", "phenotype.exposure", "samplesize.exposure", "gene.exposure")
+MR_GGT <- MR_GGT %>% filter(if_all(c("SNP", "beta.exposure", "se.exposure", "effect_allele.exposure"), ~ !is.na(.)))
+MR_GGT = subset(MR_GGT, SNP !="")
+MR_GGT$id.exposure <- "GGT_vars"
+MR_GGT$exposure <- "GGT"
+
+#install.packages("remotes")
+#install.packages("TwoSampleMR", repos = c("https://mrcieu.r-universe.dev", "https://cloud.r-project.org"))
+library(TwoSampleMR)
+library(ggplot2)
+library(ieugwasr)
+
+user()
+
+# get available GWASs
+ao <- available_outcomes()
+
+# ALT for cirrBBJ
+exposure_dat <- MR_ALT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALT$SNP, outcomes = "bbj-a-105")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALT_cirrBBJ <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALT_cirrBBJ_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALT_cirrBBJ, dat)
+ggsave(filename = "~/MR_res/ALT_cirrBBJ_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALT_cirrBBJ_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALT_cirrBBJ_loo <- ALT_cirrBBJ_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALT_cirrBBJ_loo <- ALT_cirrBBJ_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALT_cirrBBJ_loo)
+ggsave(filename = "~/MR_res/ALT_cirrBBJ_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# ALT for NAFLD
+exposure_dat <- MR_ALT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALT$SNP, outcomes = "ebi-a-GCST90091033")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALT_NAFLD <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALT_NAFLD_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALT_NAFLD, dat)
+ggsave(filename = "~/MR_res/ALT_NAFLD_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALT_NAFLD_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALT_NAFLD_loo <- ALT_NAFLD_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALT_NAFLD_loo <- ALT_NAFLD_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALT_NAFLD_loo)
+ggsave(filename = "~/MR_res/ALT_NAFLD_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# ALT for LivFat
+exposure_dat <- MR_ALT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALT$SNP, outcomes = "ebi-a-GCST90029073")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALT_LivFat <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALT_LivFat_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALT_LivFat, dat)
+ggsave(filename = "~/MR_res/ALT_LivFat_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALT_LivFat_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALT_LivFat_loo <- ALT_LivFat_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALT_LivFat_loo <- ALT_LivFat_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALT_LivFat_loo)
+ggsave(filename = "~/MR_res/ALT_LivFat_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# ALT for HCC
+exposure_dat <- MR_ALT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALT$SNP, outcomes = "bbj-a-158")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALT_HCC <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALT_HCC_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALT_HCC, dat)
+ggsave(filename = "~/MR_res/ALT_HCC_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALT_HCC_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALT_HCC_loo <- ALT_HCC_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALT_HCC_loo <- ALT_HCC_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALT_HCC_loo)
+ggsave(filename = "~/MR_res/ALT_HCC_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# ALT for PBC
+exposure_dat <- MR_ALT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALT$SNP, outcomes = "ebi-a-GCST005581")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALT_PBC <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALT_PBC_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALT_PBC, dat)
+ggsave(filename = "~/MR_res/ALT_PBC_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALT_PBC_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALT_PBC_loo <- ALT_PBC_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALT_PBC_loo <- ALT_PBC_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALT_PBC_loo)
+ggsave(filename = "~/MR_res/ALT_PBC_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+
+
+# ALT for PSC
+exposure_dat <- MR_ALT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALT$SNP, outcomes = "ieu-a-1112")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALT_PSC <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALT_PSC_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALT_PSC, dat)
+ggsave(filename = "~/MR_res/ALT_PSC_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALT_PSC_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALT_PSC_loo <- ALT_PSC_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALT_PSC_loo <- ALT_PSC_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALT_PSC_loo)
+ggsave(filename = "~/MR_res/ALT_PSC_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+
+# ALP for cirrBBJ
+exposure_dat <- MR_ALP
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALP$SNP, outcomes = "bbj-a-105")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALP_cirrBBJ <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALP_cirrBBJ_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALP_cirrBBJ, dat)
+ggsave(filename = "~/MR_res/ALP_cirrBBJ_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALP_cirrBBJ_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALP_cirrBBJ_loo <- ALP_cirrBBJ_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALP_cirrBBJ_loo <- ALP_cirrBBJ_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALP_cirrBBJ_loo)
+ggsave(filename = "~/MR_res/ALP_cirrBBJ_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# ALP for NAFLD
+exposure_dat <- MR_ALP
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALP$SNP, outcomes = "ebi-a-GCST90091033")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALP_NAFLD <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALP_NAFLD_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALP_NAFLD, dat)
+ggsave(filename = "~/MR_res/ALP_NAFLD_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALP_NAFLD_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALP_NAFLD_loo <- ALP_NAFLD_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALP_NAFLD_loo <- ALP_NAFLD_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALP_NAFLD_loo)
+ggsave(filename = "~/MR_res/ALP_NAFLD_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# ALP for LivFat
+exposure_dat <- MR_ALP
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALP$SNP, outcomes = "ebi-a-GCST90029073")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALP_LivFat <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALP_LivFat_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALP_LivFat, dat)
+ggsave(filename = "~/MR_res/ALP_LivFat_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALP_LivFat_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALP_LivFat_loo <- ALP_LivFat_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALP_LivFat_loo <- ALP_LivFat_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALP_LivFat_loo)
+ggsave(filename = "~/MR_res/ALP_LivFat_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# ALP for HCC
+exposure_dat <- MR_ALP
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALP$SNP, outcomes = "bbj-a-158")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALP_HCC <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALP_HCC_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALP_HCC, dat)
+ggsave(filename = "~/MR_res/ALP_HCC_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALP_HCC_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALP_HCC_loo <- ALP_HCC_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALP_HCC_loo <- ALP_HCC_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALP_HCC_loo)
+ggsave(filename = "~/MR_res/ALP_HCC_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# ALP for PBC
+exposure_dat <- MR_ALP
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALP$SNP, outcomes = "ebi-a-GCST005581")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALP_PBC <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALP_PBC_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALP_PBC, dat)
+ggsave(filename = "~/MR_res/ALP_PBC_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALP_PBC_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALP_PBC_loo <- ALP_PBC_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALP_PBC_loo <- ALP_PBC_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALP_PBC_loo)
+ggsave(filename = "~/MR_res/ALP_PBC_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+
+
+# ALP for PSC
+exposure_dat <- MR_ALP
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_ALP$SNP, outcomes = "ieu-a-1112")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+ALP_PSC <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+ALP_PSC_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(ALP_PSC, dat)
+ggsave(filename = "~/MR_res/ALP_PSC_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/ALP_PSC_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+ALP_PSC_loo <- ALP_PSC_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+ALP_PSC_loo <- ALP_PSC_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(ALP_PSC_loo)
+ggsave(filename = "~/MR_res/ALP_PSC_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+
+
+
+# GGT for cirrBBJ
+exposure_dat <- MR_GGT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_GGT$SNP, outcomes = "bbj-a-105")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+GGT_cirrBBJ <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+GGT_cirrBBJ_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(GGT_cirrBBJ, dat)
+ggsave(filename = "~/MR_res/GGT_cirrBBJ_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/GGT_cirrBBJ_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+GGT_cirrBBJ_loo <- GGT_cirrBBJ_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+GGT_cirrBBJ_loo <- GGT_cirrBBJ_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(GGT_cirrBBJ_loo)
+ggsave(filename = "~/MR_res/GGT_cirrBBJ_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# GGT for NAFLD
+exposure_dat <- MR_GGT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_GGT$SNP, outcomes = "ebi-a-GCST90091033")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+GGT_NAFLD <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+GGT_NAFLD_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(GGT_NAFLD, dat)
+ggsave(filename = "~/MR_res/GGT_NAFLD_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/GGT_NAFLD_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+GGT_NAFLD_loo <- GGT_NAFLD_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+GGT_NAFLD_loo <- GGT_NAFLD_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(GGT_NAFLD_loo)
+ggsave(filename = "~/MR_res/GGT_NAFLD_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# GGT for LivFat
+exposure_dat <- MR_GGT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_GGT$SNP, outcomes = "ebi-a-GCST90029073")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+GGT_LivFat <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+GGT_LivFat_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(GGT_LivFat, dat)
+ggsave(filename = "~/MR_res/GGT_LivFat_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/GGT_LivFat_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+GGT_LivFat_loo <- GGT_LivFat_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+GGT_LivFat_loo <- GGT_LivFat_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(GGT_LivFat_loo)
+ggsave(filename = "~/MR_res/GGT_LivFat_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# GGT for HCC
+exposure_dat <- MR_GGT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_GGT$SNP, outcomes = "bbj-a-158")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+GGT_HCC <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+GGT_HCC_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(GGT_HCC, dat)
+ggsave(filename = "~/MR_res/GGT_HCC_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/GGT_HCC_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+GGT_HCC_loo <- GGT_HCC_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+GGT_HCC_loo <- GGT_HCC_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(GGT_HCC_loo)
+ggsave(filename = "~/MR_res/GGT_HCC_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+# GGT for PBC
+exposure_dat <- MR_GGT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_GGT$SNP, outcomes = "ebi-a-GCST005581")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+GGT_PBC <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+GGT_PBC_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(GGT_PBC, dat)
+ggsave(filename = "~/MR_res/GGT_PBC_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/GGT_PBC_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+GGT_PBC_loo <- GGT_PBC_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+GGT_PBC_loo <- GGT_PBC_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(GGT_PBC_loo)
+ggsave(filename = "~/MR_res/GGT_PBC_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+
+
+# GGT for PSC
+exposure_dat <- MR_GGT
+exposure_dat$se.exposure <- as.numeric(exposure_dat$se.exposure)
+outcome_dat <- extract_outcome_data(snps = MR_GGT$SNP, outcomes = "ieu-a-1112")
+dat <- harmonise_data(exposure_dat, outcome_dat)
+GGT_PSC <- mr(dat, method_list = c("mr_egger_regression", "mr_ivw"))
+GGT_PSC_loo <- mr_leaveoneout(dat)
+p1 <- mr_scatter_plot(GGT_PSC, dat)
+ggsave(filename = "~/MR_res/GGT_PSC_scatter.pdf", plot = p1[[1]], width = 7, height = 7)
+res_single <- mr_singlesnp(dat)
+res_single <- res_single %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+res_single <- res_single %>% arrange(desc(b))
+p2 <- mr_forest_plot(res_single)
+ggsave(filename = "~/MR_res/GGT_PSC_forest.pdf", plot = p2[[1]], width = 7, height = 7)
+GGT_PSC_loo <- GGT_PSC_loo %>% group_by(SNP) %>% arrange(p) %>% slice(1)
+GGT_PSC_loo <- GGT_PSC_loo %>% arrange(desc(b))
+p3 <- mr_leaveoneout_plot(GGT_PSC_loo)
+ggsave(filename = "~/MR_res/GGT_PSC_loo.pdf", plot = p3[[1]], width = 7, height = 7)
+
+
+
+
+## make a summary table of results
+MR_sumtab <- rbind(GGT_cirrBBJ, GGT_NAFLD, GGT_LivFat, GGT_HCC, GGT_PBC, GGT_PSC, ALP_cirrBBJ, ALP_NAFLD, ALP_LivFat, ALP_HCC, ALP_PBC, ALP_PSC, ALT_cirrBBJ, ALT_NAFLD, ALT_LivFat, ALT_HCC, ALT_PBC, ALT_PSC)
+
+MR_sumtab <- subset(MR_sumtab, select = -c(id.exposure, id.outcome))
+MR_sumtab$b <- round(MR_sumtab$b, digits=3)
+MR_sumtab$p <- round(MR_sumtab$p, digits=3)
+MR_sumtab$se <- round(MR_sumtab$se, digits=3)
+
+MR_sumtab$effect <- paste(MR_sumtab$b, MR_sumtab$se, sep = " (")
+MR_sumtab$effect <- paste(MR_sumtab$effect, "", sep = ")")
+MR_sumtab <- subset(MR_sumtab, select =c(exposure, outcome, method, effect, p, nsnp))
+.rs.restartR()
+library(data.table)
+fwrite(MR_sumtab, "MR_sumtab.txt", sep="\t")
+
+MR_sumtab_top <- subset(MR_sumtab, p<=.05)
+fwrite(MR_sumtab_top, "MR_sumtab_top.txt", sep="\t")
+
+
+save.image("~/Monogen_Feb25.RData")
+
+##### ---- 
+##### ---- Final tidy up of full results table and a top results table
+##### ----
+
+val_sumtab_short = subset(val_sumtab, select=c("SNP", "val_annot"))
+res_annot_noPNP <- merge(res_annot_noPNP, val_sumtab_short, by="SNP", all.x=TRUE)
+
+final_tab =  subset(res_annot_noPNP, select=c("gene_lookup", "SNP", "varId", "EAF", "phenotype", "beta", "stdErr", "pValue", "n", "source", "Mutation", "CADD_PHRED", "annotation_combined", "val_annot.x"))
+names(final_tab)[names(final_tab) == "val_annot.x"] <- "val_annot"
+
+
+
+final_tab <- final_tab %>% mutate(phenotype = ifelse(phenotype == "BILIRUBIN", "Bilirubin", phenotype))
+final_tab <- final_tab %>% mutate(phenotype = ifelse(phenotype == "TotBili", "Bilirubin", phenotype))
+final_tab <- final_tab %>% mutate(phenotype = ifelse(phenotype == "NAFLD", "MASLD", phenotype))
+
+# some gene loci overlap
+final_tab <- final_tab %>% mutate(gene_lookup = ifelse(gene_lookup == "LRP5", "LRP5 / GANAB", gene_lookup))
+final_tab <- final_tab %>% mutate(gene_lookup = ifelse(gene_lookup == "GANAB", "LRP5 / GANAB", gene_lookup))
+
+final_tab <- final_tab %>% mutate(gene_lookup = ifelse(gene_lookup == "BCS1L", "BCS1L / CYP27A1", gene_lookup))
+final_tab <- final_tab %>% mutate(gene_lookup = ifelse(gene_lookup == "CYP27A1", "BCS1L / CYP27A1", gene_lookup))
+
+#remove duplicates
+final_tab <- final_tab %>% distinct()
+final_tab_filtered <- final_tab %>% group_by(SNP, phenotype) %>% filter(!(is.na(beta) | is.na(stdErr)) | n() == 1) %>% ungroup()
+
+final_tab2 <- final_tab_filtered %>% group_by(SNP, phenotype) %>% arrange(pValue) %>% slice(1)
+
+# some are missing SE - those that came from GeneBass
+final_tab_GeneBass <- final_tab2 %>%
+  filter(source == "GeneBass") %>%
+  mutate(Z = qnorm(pmin(1 - pmax(as.numeric(pValue), 1e-300) / 2, 0.999999999999999)))
+final_tab_GeneBass$stdErr <- as.numeric(abs(final_tab_GeneBass$beta / final_tab_GeneBass$Z))
+final_tab_other <- final_tab2 %>% filter(source != "GeneBass")
+final_tab_other$stdErr <- as.numeric(final_tab_other$stdErr)
+final_tab2 <- rbind(final_tab_GeneBass, final_tab_other)
+
+final_tab2 = subset(final_tab2, select=-c(Z))
+fwrite(final_tab2, "final_tab2.txt", sep="\t")
+
+### make a top results final table
+
+# find variants with eqtl in look-up gene
+library(dplyr)
+library(stringr)
+library(purrr)
+
+final_tab2 <- final_tab2 %>%
+  mutate(
+    match_found = if_else(
+      map2_lgl(
+        str_to_lower(gene_lookup), 
+        str_to_lower(annotation_combined), 
+        ~ any(str_detect(.y, paste0("\\b", .x, "\\b")))
+      ), 
+      "yes", "no"
+    )
+  )
+
+# at least one validation
+keep1 = subset(final_tab2, val_annot !="")
+keep1 = subset(keep1, val_annot !=" ")
+
+keep1 <- keep1 %>% semi_join(val_sumtab_stringent, by = "SNP")
+keep2 <- final_tab2 %>% filter(as.numeric(CADD_PHRED) >= 15)
+keep3 = subset(final_tab2, match_found =="yes")
+final_tab4 = rbind(keep1, keep2, keep3)
+final_tab4 <- final_tab4 %>% distinct()
+
+final_tab4 <- final_tab4 %>% filter(EAF >= .05)
+# rest to be reviewed manually
+fwrite(final_tab4, "final_tab4.txt", sep="\t")
+
+# list of variants to be kept
+library(readxl)
+keep_vars <- read_excel("final_tab4_JMedit_v2-keep.xlsx")
+
+final_tab5 <- final_tab4 %>% semi_join(keep_vars, by = c("SNP", "phenotype"))
+final_tab5 = subset(final_tab5, select=-c(Z))
+fwrite(final_tab5, "final_tab5.txt", sep="\t")
+
+save.image("~/Monogen_Feb25.RData")
+
+
+
+
+
+
+##### ---- 
+##### ---- Focus on just JAG1 and its variants
+##### ----
+
+library(readxl)
+LOVD <- read_excel("~/JAG1_var/LOVD_JPM2.xlsx")
+Gilbert <- read_excel("~/JAG1_var/Gilbert_dataJPM.xlsx")
+ClinVar <- read_excel("~/JAG1_var/ClinVar_alagilleEdit2_JPM.xlsx")
+
+colnames(LOVD) <- c("Germline_DNA_Variant", "Transcript_DNA_Variant", "AA_Position", "AA_Ref", "AA_Alternative", "Protein_Change", "Clinical_significance", "Reference", "Source")
+colnames(Gilbert) <- c("Germline_DNA_Variant", "Transcript_DNA_Variant", "AA_Position", "AA_Ref", "AA_Alternative", "Protein_Change", "Clinical_significance", "Reference", "Source")
+colnames(ClinVar) <- c("Germline_DNA_Variant", "Transcript_DNA_Variant", "AA_Position", "AA_Ref", "AA_Alternative", "Protein_Change", "Clinical_significance", "Reference", "Source")
+
+JAG1_vars <- rbind(LOVD, Gilbert, ClinVar)
+
+# remove duplicates
+JAG1_vars_summarized <- JAG1_vars %>%
+  group_by(Transcript_DNA_Variant) %>%
+  summarize(References = paste(Reference, collapse = ", "), .groups = "drop")
+
+# Merge summarized data with original data frame
+JAG1_vars_cleaned <- left_join(JAG1_vars, JAG1_vars_summarized, by = "Transcript_DNA_Variant")
+JAG1_vars_cleaned <- JAG1_vars_cleaned %>% distinct(Transcript_DNA_Variant, .keep_all = TRUE)
+JAG1_vars_cleaned$AA_Position <- as.numeric(JAG1_vars_cleaned$AA_Position)
+
+JAG1_vars_cleaned$References <- str_replace_all(JAG1_vars_cleaned$References, "NA, ", "")
+JAG1_vars_cleaned$References <- str_replace_all(JAG1_vars_cleaned$References, "NA ", "")
+JAG1_vars_cleaned$References <- str_replace_all(JAG1_vars_cleaned$References, "NA", "")
+
+# tidy up clin sig field
+JAG1_conversion <- read_excel("JAG1_conversion.xlsx")
+
+JAG1_vars_cleaned2 <- JAG1_vars_cleaned %>%  left_join(JAG1_conversion, by = "Clinical_significance")
+JAG1_vars_cleaned2 = subset(JAG1_vars_cleaned2, select = -c(Clinical_significance, Reference))
+fwrite(JAG1_vars_cleaned2, "JAG1_vars_cleaned2.txt", sep="\t")
+
+######## --------- 
+######## --------- 
+######## ---------  make a heatmap of all jag1 variants and their alpha missense scores
+######## --------- 
+######## --------- 
+
+
+JAG1_aa <- fread("JAG1_aa.tsv")
+colnames(JAG1_aa) <- c("uniprot_id", "protein_variant", "am_pathogenicity", "am_class")
+
+JAG1_aa2 <- JAG1_aa
+
+JAG1_aa3 <- JAG1_aa2 %>% 
+  separate(col= protein_variant,
+           into = c("original_aa", "rest"),
+           sep = 1,
+           remove = FALSE)
+
+JAG1_aa4 <- JAG1_aa3 %>% 
+  separate(col= rest,
+           into = c("pos_aa", "alternative_aa"),
+           sep = -1,
+           remove = TRUE)
+
+JAG1_aa5<- JAG1_aa4 %>% 
+  select(alternative_aa, pos_aa, am_pathogenicity)
+
+JAG1_aa6 <- JAG1_aa5 %>% 
+  pivot_wider(names_from = "pos_aa",
+              values_from = "am_pathogenicity")
+
+JAG1_aa7 <- column_to_rownames(JAG1_aa6, var = "alternative_aa")
+
+JAG1_aa8 <- JAG1_aa7
+char_columns <- sapply(JAG1_aa8, class) == "character"
+JAG1_aa8[ , char_columns] <- sapply(JAG1_aa8[ , char_columns], as.numeric)
+
+JAG1_aa9 <- as.matrix(JAG1_aa8)
+
+JAG1_heatmap_2 <- JAG1_aa9
+colnames(JAG1_heatmap_2) <- paste0(1:ncol(JAG1_heatmap_2))
+selected_colnames <- colnames(JAG1_heatmap_2)[seq(1, ncol(JAG1_heatmap_2), 25)]
+selected_colnames
+
+pdf("JAG1_hm.pdf", width = 12, height = 6)
+JAG1_hm <- pheatmap(JAG1_heatmap_2,
+         cluster_rows = F, cluster_cols = F, 
+         #clustering_distance_cols = 'euclidean',
+         #clustering_distance_rows = 'euclidean',
+         #clustering_method = 'ward.D'",
+         main = "Pathogenicity of JAG1 amino acid substitutions",
+         show_colnames = T, show_rownames = T,
+         labels_col = selected_colnames,
+         number_color = "black", 
+         fontsize_col = 10,
+         fontsize_row = 10,
+         border_color = "black",
+         col = rev(brewer.pal(10, 'RdYlGn')),
+         legend_breaks = c(0.05, 0.34, 0.564, 1),
+         legend_labels = c("Benign", "Ambiguous", "Likely \n pathogenic", "Pathogenic"))
+dev.off()
+
+######## --------- 
+######## ---------  repeat the heatmap for just the region of interest
+######## --------- 
+
+JAG1_hm_reg <- subset(JAG1_heatmap_2, select = 850:900)
+
+selected_colnames2 <- colnames(JAG1_hm_reg)
+selected_colnames2
+
+pdf("JAG1_hm_reg.pdf", width = 12, height = 6)
+JAG1_hm_reg <- pheatmap(JAG1_hm_reg,
+         cluster_rows = F, cluster_cols = F, 
+         #clustering_distance_cols = 'euclidean',
+         #clustering_distance_rows = 'euclidean',
+         #clustering_method = 'ward.D'",
+         main = "Pathogenicity of JAG1 amino acid substitutions",
+         show_colnames = T, show_rownames = T,
+         labels_col = selected_colnames2,
+         number_color = "black", 
+         fontsize_col = 10,
+         fontsize_row = 10,
+         border_color = "black",
+         col = rev(brewer.pal(10, 'RdYlGn')),
+         legend_breaks = c(0.05, 0.34, 0.564, 0.95),
+         legend_labels = c("Benign", "Ambiguous", "Likely \n pathogenic", "Pathogenic"))
+dev.off()
+
+
+
+
+
+
+
+**********
+********** **********
+********** ********** **********
+********** ********** ********** ********** Fin.
+********** ********** **********
+********** **********
+**********
+
+
+
+
+
