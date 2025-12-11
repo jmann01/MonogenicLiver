@@ -1,0 +1,1973 @@
+## analyse All of Us for monogenic variants
+
+import pandas
+import os
+
+# This query represents dataset "LFTs_LiverDisease_v1" for domain "measurement" and was generated for All of Us Controlled Tier Dataset v8
+dataset_97719722_measurement_sql = """
+    SELECT
+        measurement.person_id,
+        measurement.measurement_concept_id,
+        m_standard_concept.concept_name as standard_concept_name,
+        m_standard_concept.concept_code as standard_concept_code,
+        m_standard_concept.vocabulary_id as standard_vocabulary,
+        measurement.measurement_datetime,
+        measurement.measurement_type_concept_id,
+        m_type.concept_name as measurement_type_concept_name,
+        measurement.operator_concept_id,
+        m_operator.concept_name as operator_concept_name,
+        measurement.value_as_number,
+        measurement.value_as_concept_id,
+        m_value.concept_name as value_as_concept_name,
+        measurement.unit_concept_id,
+        m_unit.concept_name as unit_concept_name,
+        measurement.range_low,
+        measurement.range_high,
+        measurement.visit_occurrence_id,
+        m_visit.concept_name as visit_occurrence_concept_name,
+        measurement.measurement_source_value,
+        measurement.measurement_source_concept_id,
+        m_source_concept.concept_name as source_concept_name,
+        m_source_concept.concept_code as source_concept_code,
+        m_source_concept.vocabulary_id as source_vocabulary,
+        measurement.unit_source_value,
+        measurement.value_source_value 
+    FROM
+        ( SELECT
+            * 
+        FROM
+            `""" + os.environ["WORKSPACE_CDR"] + """.measurement` measurement 
+        WHERE
+            (
+                measurement_concept_id IN (SELECT
+                    DISTINCT c.concept_id 
+                FROM
+                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` c 
+                JOIN
+                    (SELECT
+                        CAST(cr.id as string) AS id       
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` cr       
+                    WHERE
+                        concept_id IN (3004249, 3038553, 40772572, 3012888, 40772590)       
+                        AND full_text LIKE '%_rank1]%'      ) a 
+                        ON (c.path LIKE CONCAT('%.', a.id, '.%') 
+                        OR c.path LIKE CONCAT('%.', a.id) 
+                        OR c.path LIKE CONCAT(a.id, '.%') 
+                        OR c.path = a.id) 
+                WHERE
+                    is_standard = 1 
+                    AND is_selectable = 1) 
+                OR  measurement_source_concept_id IN (SELECT
+                    DISTINCT c.concept_id 
+                FROM
+                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` c 
+                JOIN
+                    (SELECT
+                        CAST(cr.id as string) AS id       
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` cr       
+                    WHERE
+                        concept_id IN (44831608, 725460)       
+                        AND full_text LIKE '%_rank1]%'      ) a 
+                        ON (c.path LIKE CONCAT('%.', a.id, '.%') 
+                        OR c.path LIKE CONCAT('%.', a.id) 
+                        OR c.path LIKE CONCAT(a.id, '.%') 
+                        OR c.path = a.id) 
+                WHERE
+                    is_standard = 0 
+                    AND is_selectable = 1)
+            )  
+            AND (
+                measurement.PERSON_ID IN (SELECT
+                    distinct person_id  
+                FROM
+                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` cb_search_person  
+                WHERE
+                    cb_search_person.person_id IN (SELECT
+                        person_id 
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` p 
+                    WHERE
+                        has_whole_genome_variant = 1 ) 
+                    AND cb_search_person.person_id IN (SELECT
+                        person_id 
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` p 
+                    WHERE
+                        has_ehr_data = 1 ) 
+                    AND cb_search_person.person_id IN (SELECT
+                        person_id 
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.person` p 
+                    WHERE
+                        sex_at_birth_concept_id IN (45878463, 45880669) ) 
+                    AND cb_search_person.person_id IN (SELECT
+                        criteria.person_id 
+                    FROM
+                        (SELECT
+                            DISTINCT person_id, entry_date, concept_id 
+                        FROM
+                            `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_all_events` 
+                        WHERE
+                            (concept_id IN(SELECT
+                                DISTINCT c.concept_id 
+                            FROM
+                                `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` c 
+                            JOIN
+                                (SELECT
+                                    CAST(cr.id as string) AS id       
+                                FROM
+                                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` cr       
+                                WHERE
+                                    concept_id IN (37032269, 40779224, 40779159)       
+                                    AND full_text LIKE '%_rank1]%'      ) a 
+                                    ON (c.path LIKE CONCAT('%.', a.id, '.%') 
+                                    OR c.path LIKE CONCAT('%.', a.id) 
+                                    OR c.path LIKE CONCAT(a.id, '.%') 
+                                    OR c.path = a.id) 
+                            WHERE
+                                is_standard = 1 
+                                AND is_selectable = 1) 
+                            AND is_standard = 1 )) criteria ) )
+            )) measurement 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_standard_concept 
+            ON measurement.measurement_concept_id = m_standard_concept.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_type 
+            ON measurement.measurement_type_concept_id = m_type.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_operator 
+            ON measurement.operator_concept_id = m_operator.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_value 
+            ON measurement.value_as_concept_id = m_value.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_unit 
+            ON measurement.unit_concept_id = m_unit.concept_id 
+    LEFT JOIn
+        `""" + os.environ["WORKSPACE_CDR"] + """.visit_occurrence` v 
+            ON measurement.visit_occurrence_id = v.visit_occurrence_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_visit 
+            ON v.visit_concept_id = m_visit.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_source_concept 
+            ON measurement.measurement_source_concept_id = m_source_concept.concept_id"""
+
+dataset_97719722_measurement_df1 = pandas.read_gbq(
+    dataset_97719722_measurement_sql,
+    dialect="standard",
+    use_bqstorage_api=("BIGQUERY_STORAGE_API_ENABLED" in os.environ),
+    progress_bar_type="tqdm_notebook")
+
+dataset_97719722_measurement_df1.head(5)
+
+# variables to keep
+keep = [
+    'Body mass index (BMI) [Ratio]',
+ 'Cholesterol [Mass/volume] in Serum or Plasma',
+ 'Cholesterol in HDL [Mass/volume] in Serum or Plasma',
+ 'Cholesterol in LDL [Mass/volume] in Serum or Plasma',
+ 'Diastolic blood pressure',
+ 'Systolic blood pressure',
+ 'Triglyceride [Mass/volume] in Serum or Plasma'
+]
+df_sub = dataset_97719722_measurement_df1[
+    dataset_97719722_measurement_df1['standard_concept_name'].isin(keep)
+].copy()   # <-- important!
+# rename vars
+import numpy as np
+
+df_sub.loc[
+    df_sub['standard_concept_name'].str.startswith('Triglyceride'),
+    'variable'
+] = 'TG'
+
+df_sub.loc[
+    df_sub['standard_concept_name'].str.startswith('Body mass index'),
+    'variable'
+] = 'BMI'
+
+
+df_sub.loc[
+    df_sub['standard_concept_name'].str.startswith('Cholesterol [Mass'),
+    'variable'
+] = 'Chol'
+
+df_sub.loc[
+    df_sub['standard_concept_name'].str.startswith('Cholesterol in HDL'),
+    'variable'
+] = 'HDL'
+
+df_sub.loc[
+    df_sub['standard_concept_name'].str.startswith('Cholesterol in LDL'),
+    'variable'
+] = 'LDL'
+
+
+df_sub.loc[
+    df_sub['standard_concept_name'].str.startswith('Diastolic blood pressure'),
+    'variable'
+] = 'DBP'
+
+df_sub.loc[
+    df_sub['standard_concept_name'].str.startswith('Systolic blood pressure'),
+    'variable'
+] = 'SBP'
+
+# pivot wider
+wide_p1 = df_sub.pivot_table(
+    index='person_id',
+    columns='variable',
+    values='value_as_number',
+    aggfunc='mean'   # or "last", "max", etc. if you prefer
+)
+wide_p1.head(5)
+
+import pandas as pd
+
+# check the data
+# Convert all columns to numeric, coerce errors to NaN
+wide_p1 = wide_p1.apply(pd.to_numeric, errors='coerce')
+
+# Now check summary stats again
+summary_stats = pd.DataFrame({
+    'mean': wide_p1.mean(),
+    'sd': wide_p1.std(),
+    'min': wide_p1.min(),
+    'max': wide_p1.max(),
+    'count': wide_p1.count()  # number of non-NaN values
+})
+print(summary_stats)
+
+import matplotlib.pyplot as plt
+
+for col in wide_p1.columns:
+    plt.figure(figsize=(6,4))
+    plt.hist(wide_p1[col].dropna(), bins=50, color='skyblue', edgecolor='black')
+    plt.title(f'Distribution of {col}')
+    plt.xlabel(col)
+    plt.ylabel('Frequency')
+    plt.show()
+
+for col in wide_p1.columns:
+    Q1 = wide_p1[col].quantile(0.25)
+    Q3 = wide_p1[col].quantile(0.75)
+    IQR = Q3 - Q1
+    outliers = wide_p1[(wide_p1[col] < Q1 - 1.5*IQR) | (wide_p1[col] > Q3 + 1.5*IQR)]
+    print(f'{col} has {len(outliers)} outliers')
+
+import numpy as np
+
+# Make sure all columns are numeric
+wide_p1 = wide_p1.apply(pd.to_numeric, errors='coerce')
+
+# Function to replace outliers with NaN
+def remove_outliers_iqr(df):
+    df_clean = df.copy()
+    for col in df_clean.columns:
+        Q1 = df_clean[col].quantile(0.25)
+        Q3 = df_clean[col].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        df_clean[col] = df_clean[col].mask((df_clean[col] < lower_bound) | (df_clean[col] > upper_bound), np.nan)
+    return df_clean
+
+wide_p1_clean = remove_outliers_iqr(wide_p1)
+
+# Check results
+summary_stats_clean = pd.DataFrame({
+    'mean': wide_p1_clean.mean(),
+    'sd': wide_p1_clean.std(),
+    'min': wide_p1_clean.min(),
+    'max': wide_p1_clean.max(),
+    'count': wide_p1_clean.count()  # number of non-NaN values
+})
+print(summary_stats_clean)
+
+import pandas
+import os
+
+# This query represents dataset "LFTs_LiverDisease_v1" for domain "measurement" and was generated for All of Us Controlled Tier Dataset v8
+dataset_97719722_measurement_sql = """
+    SELECT
+        measurement.person_id,
+        measurement.measurement_concept_id,
+        m_standard_concept.concept_name as standard_concept_name,
+        m_standard_concept.concept_code as standard_concept_code,
+        m_standard_concept.vocabulary_id as standard_vocabulary,
+        measurement.measurement_datetime,
+        measurement.measurement_type_concept_id,
+        m_type.concept_name as measurement_type_concept_name,
+        measurement.operator_concept_id,
+        m_operator.concept_name as operator_concept_name,
+        measurement.value_as_number,
+        measurement.value_as_concept_id,
+        m_value.concept_name as value_as_concept_name,
+        measurement.unit_concept_id,
+        m_unit.concept_name as unit_concept_name,
+        measurement.range_low,
+        measurement.range_high,
+        measurement.visit_occurrence_id,
+        m_visit.concept_name as visit_occurrence_concept_name,
+        measurement.measurement_source_value,
+        measurement.measurement_source_concept_id,
+        m_source_concept.concept_name as source_concept_name,
+        m_source_concept.concept_code as source_concept_code,
+        m_source_concept.vocabulary_id as source_vocabulary,
+        measurement.unit_source_value,
+        measurement.value_source_value 
+    FROM
+        ( SELECT
+            * 
+        FROM
+            `""" + os.environ["WORKSPACE_CDR"] + """.measurement` measurement 
+        WHERE
+            (
+                measurement_concept_id IN (SELECT
+                    DISTINCT c.concept_id 
+                FROM
+                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` c 
+                JOIN
+                    (SELECT
+                        CAST(cr.id as string) AS id       
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` cr       
+                    WHERE
+                        concept_id IN (40782579, 37049794, 40785861, 40779224, 40789192)       
+                        AND full_text LIKE '%_rank1]%'      ) a 
+                        ON (c.path LIKE CONCAT('%.', a.id, '.%') 
+                        OR c.path LIKE CONCAT('%.', a.id) 
+                        OR c.path LIKE CONCAT(a.id, '.%') 
+                        OR c.path = a.id) 
+                WHERE
+                    is_standard = 1 
+                    AND is_selectable = 1) 
+                OR  measurement_source_concept_id IN (SELECT
+                    DISTINCT c.concept_id 
+                FROM
+                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` c 
+                JOIN
+                    (SELECT
+                        CAST(cr.id as string) AS id       
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` cr       
+                    WHERE
+                        concept_id IN (44831608, 725460)       
+                        AND full_text LIKE '%_rank1]%'      ) a 
+                        ON (c.path LIKE CONCAT('%.', a.id, '.%') 
+                        OR c.path LIKE CONCAT('%.', a.id) 
+                        OR c.path LIKE CONCAT(a.id, '.%') 
+                        OR c.path = a.id) 
+                WHERE
+                    is_standard = 0 
+                    AND is_selectable = 1)
+            )  
+            AND (
+                measurement.PERSON_ID IN (SELECT
+                    distinct person_id  
+                FROM
+                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` cb_search_person  
+                WHERE
+                    cb_search_person.person_id IN (SELECT
+                        person_id 
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` p 
+                    WHERE
+                        has_whole_genome_variant = 1 ) 
+                    AND cb_search_person.person_id IN (SELECT
+                        person_id 
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` p 
+                    WHERE
+                        has_ehr_data = 1 ) 
+                    AND cb_search_person.person_id IN (SELECT
+                        person_id 
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.person` p 
+                    WHERE
+                        sex_at_birth_concept_id IN (45878463, 45880669) ) 
+                    AND cb_search_person.person_id IN (SELECT
+                        criteria.person_id 
+                    FROM
+                        (SELECT
+                            DISTINCT person_id, entry_date, concept_id 
+                        FROM
+                            `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_all_events` 
+                        WHERE
+                            (concept_id IN(SELECT
+                                DISTINCT c.concept_id 
+                            FROM
+                                `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` c 
+                            JOIN
+                                (SELECT
+                                    CAST(cr.id as string) AS id       
+                                FROM
+                                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` cr       
+                                WHERE
+                                    concept_id IN (37032269, 40779224, 40779159)       
+                                    AND full_text LIKE '%_rank1]%'      ) a 
+                                    ON (c.path LIKE CONCAT('%.', a.id, '.%') 
+                                    OR c.path LIKE CONCAT('%.', a.id) 
+                                    OR c.path LIKE CONCAT(a.id, '.%') 
+                                    OR c.path = a.id) 
+                            WHERE
+                                is_standard = 1 
+                                AND is_selectable = 1) 
+                            AND is_standard = 1 )) criteria ) )
+            )) measurement 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_standard_concept 
+            ON measurement.measurement_concept_id = m_standard_concept.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_type 
+            ON measurement.measurement_type_concept_id = m_type.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_operator 
+            ON measurement.operator_concept_id = m_operator.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_value 
+            ON measurement.value_as_concept_id = m_value.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_unit 
+            ON measurement.unit_concept_id = m_unit.concept_id 
+    LEFT JOIn
+        `""" + os.environ["WORKSPACE_CDR"] + """.visit_occurrence` v 
+            ON measurement.visit_occurrence_id = v.visit_occurrence_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_visit 
+            ON v.visit_concept_id = m_visit.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` m_source_concept 
+            ON measurement.measurement_source_concept_id = m_source_concept.concept_id"""
+
+dataset_97719722_measurement_df2 = pandas.read_gbq(
+    dataset_97719722_measurement_sql,
+    dialect="standard",
+    use_bqstorage_api=("BIGQUERY_STORAGE_API_ENABLED" in os.environ),
+    progress_bar_type="tqdm_notebook")
+
+dataset_97719722_measurement_df2.head(5)
+
+# variables to keep
+keep = [
+    'Alanine aminotransferase [Enzymatic activity/volume] in Blood',
+    'Alanine aminotransferase [Enzymatic activity/volume] in Serum or Plasma',
+    'Alanine aminotransferase [Enzymatic activity/volume] in Serum, Plasma or Blood',
+    'Alkaline phosphatase [Enzymatic activity/volume] in Serum or Plasma',
+    'Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma',
+    'Bilirubin.conjugated [Mass/volume] in Serum or Plasma',
+    'Bilirubin.direct [Mass/volume] in Serum or Plasma',
+    'Bilirubin.total [Mass/volume] in Blood',
+    'Bilirubin.total [Mass/volume] in Serum or Plasma',
+    'Bilirubin.total [Mass/volume] in Venous blood'
+]
+df_sub = dataset_97719722_measurement_df2[
+    dataset_97719722_measurement_df2['standard_concept_name'].isin(keep)
+].copy()   # <-- important!
+# rename vars
+import numpy as np
+
+df_sub['variable'] = np.select(
+    [
+        df_sub['standard_concept_name'].str.startswith('Alanine aminotransferase'),
+        df_sub['standard_concept_name'].isin([
+            'Bilirubin.conjugated [Mass/volume] in Serum or Plasma',
+            'Bilirubin.direct [Mass/volume] in Serum or Plasma'
+        ]),
+        df_sub['standard_concept_name'].str.startswith('Bilirubin.total')
+    ],
+    [
+        'ALT',        # All ALT variants
+        'ConjBili',   # conjugated + direct
+        'TotBili'     # total bilirubin
+    ],
+    default=df_sub['standard_concept_name']  # fallback, shouldn't occur
+)
+df_sub.loc[
+    df_sub['standard_concept_name'].str.startswith('Aspartate aminotransferase'),
+    'variable'
+] = 'AST'
+
+df_sub.loc[
+    df_sub['standard_concept_name'].str.startswith('Alkaline phosphatase'),
+    'variable'
+] = 'ALP'
+
+# pivot wider
+wide_p2 = df_sub.pivot_table(
+    index='person_id',
+    columns='variable',
+    values='value_as_number',
+    aggfunc='mean'   # or "last", "max", etc. if you prefer
+)
+wide_p2.head(5)
+
+import numpy as np
+
+# Make sure all columns are numeric
+wide_p2 = wide_p2.apply(pd.to_numeric, errors='coerce')
+
+# Function to replace outliers with NaN
+def remove_outliers_iqr(df):
+    df_clean = df.copy()
+    for col in df_clean.columns:
+        Q1 = df_clean[col].quantile(0.25)
+        Q3 = df_clean[col].quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+        df_clean[col] = df_clean[col].mask((df_clean[col] < lower_bound) | (df_clean[col] > upper_bound), np.nan)
+    return df_clean
+
+wide_p2_clean = remove_outliers_iqr(wide_p2)
+
+# Check results
+summary_stats_clean = pd.DataFrame({
+    'mean': wide_p2_clean.mean(),
+    'sd': wide_p2_clean.std(),
+    'min': wide_p2_clean.min(),
+    'max': wide_p2_clean.max(),
+    'count': wide_p2_clean.count()  # number of non-NaN values
+})
+print(summary_stats_clean)
+
+# bind measurement tables
+import pandas as pd
+meas_df = pd.merge(wide_p1_clean, wide_p2_clean, on='person_id', how='outer')
+meas_df.head(5)
+
+# save
+meas_df.to_csv("LFT_meas_df.tsv", sep = "\t")
+import pandas
+import os
+
+# This query represents dataset "LFTs_LiverDisease_v1" for domain "condition" and was generated for All of Us Controlled Tier Dataset v8
+dataset_97719722_condition_sql = """
+    SELECT
+        c_occurrence.person_id,
+        c_occurrence.condition_concept_id,
+        c_standard_concept.concept_name as standard_concept_name,
+        c_standard_concept.concept_code as standard_concept_code,
+        c_standard_concept.vocabulary_id as standard_vocabulary,
+        c_occurrence.condition_start_datetime,
+        c_occurrence.condition_end_datetime,
+        c_occurrence.condition_type_concept_id,
+        c_type.concept_name as condition_type_concept_name,
+        c_occurrence.stop_reason,
+        c_occurrence.visit_occurrence_id,
+        visit.concept_name as visit_occurrence_concept_name,
+        c_occurrence.condition_source_value,
+        c_occurrence.condition_source_concept_id,
+        c_source_concept.concept_name as source_concept_name,
+        c_source_concept.concept_code as source_concept_code,
+        c_source_concept.vocabulary_id as source_vocabulary,
+        c_occurrence.condition_status_source_value,
+        c_occurrence.condition_status_concept_id,
+        c_status.concept_name as condition_status_concept_name 
+    FROM
+        ( SELECT
+            * 
+        FROM
+            `""" + os.environ["WORKSPACE_CDR"] + """.condition_occurrence` c_occurrence 
+        WHERE
+            (
+                condition_source_concept_id IN (SELECT
+                    DISTINCT c.concept_id 
+                FROM
+                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` c 
+                JOIN
+                    (SELECT
+                        CAST(cr.id as string) AS id       
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` cr       
+                    WHERE
+                        concept_id IN (11925, 1567375, 1567479, 1569400, 1569401, 1569669, 1569670, 1569671, 1569680, 1569681, 1569691, 1572207, 1595615, 1595616, 35205765, 35205766, 35205767, 35205768, 35206146, 35206147, 35206148, 35206149, 35206150, 35206151, 35206152, 35206154, 35206155, 35206156, 35206157, 35206463, 35206522, 35206626, 35208330, 35208331, 35208332, 35208333, 35208334, 35208335, 35208337, 35208338, 35208339, 35208340, 35208341, 35208342, 35208343, 35208344, 35208345, 35208346, 35208347, 35208348, 35208349, 35208350, 35208351, 35208352, 35208353, 35208354, 35208355, 35208356, 35208358, 35208359, 35208360, 35208361, 35208362, 35208363, 35208364, 35208365, 35208366, 35208368, 35208369, 35208380, 35208381, 35208382, 35208383, 35208384, 35208385, 35208386, 35208387, 35208400, 35210955, 35210956, 35210957, 35210958, 35210959, 35210960, 35210961, 35210962, 35211515, 35211524, 35225408, 37402533, 44503833, 44819423, 44819737, 44819802, 44819803, 44819809, 44819810,
+ 44820070, 44820653, 44820955, 44820956, 44820962, 44821549, 44822040, 44822042, 44822043, 44822307, 44822503, 44822922, 44823185, 44823186, 44823187, 44823458, 44823552, 44824273, 44824334, 44824335, 44824336, 44824570, 44824606, 44824727, 44824728, 44825528, 44825529, 44826395, 44826726, 44826728, 44827878, 44827879, 44828103, 44828256, 44828257, 44828998, 44829055, 44829390, 44829391, 44829795, 44829796, 44830167, 44830534, 44830535, 44831319, 44831320, 44832120, 44832406, 44832407, 44832476, 44832477, 44832478, 44832479, 44832480, 44832809, 44834031, 44834032, 44834123, 44834823, 44834825, 44834826, 44834883, 44835050, 44835199, 44836029, 44836245, 44836827, 44836885, 44836900, 44837177, 44837178, 44837179, 44837241, 44837538, 45533616, 45534894, 45538463, 45538464, 45538545, 45539251, 45539323, 45539763, 45539764, 45542632, 45543335, 45543338, 45543339, 45543341, 45543343, 45544592, 45544593, 45548170, 45548171, 45549413, 45549414, 45551553, 45552946, 45552947, 45552948, 45552959,
+ 45554188, 45557672, 45557675, 45557679, 45558219, 45558897, 45558898, 45558900, 45558901, 45561100, 45562507, 45562514, 45567324, 45567328, 45568574, 45572150, 45572226, 45573458, 45573459, 45573460, 45576259, 45576934, 45576999, 45577000, 45578239, 45581912, 45581915, 45581916, 45583143, 45585987, 45586730, 45586731, 45587499, 45587918, 45587919, 45590132, 45591609, 45592202, 45592203, 45592204, 45594968, 45597620, 45597621, 45597622, 45597624, 45597625, 45601187, 45601192, 45602438, 45602439, 45602440, 45605221, 45605952, 45605957, 45606552, 45609395, 45907536, 45910612, 725367, 725368, 725369)       
+                        AND full_text LIKE '%_rank1]%'      ) a 
+                        ON (c.path LIKE CONCAT('%.', a.id, '.%') 
+                        OR c.path LIKE CONCAT('%.', a.id) 
+                        OR c.path LIKE CONCAT(a.id, '.%') 
+                        OR c.path = a.id) 
+                WHERE
+                    is_standard = 0 
+                    AND is_selectable = 1)
+            )  
+            AND (
+                c_occurrence.PERSON_ID IN (SELECT
+                    distinct person_id  
+                FROM
+                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` cb_search_person  
+                WHERE
+                    cb_search_person.person_id IN (SELECT
+                        person_id 
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` p 
+                    WHERE
+                        has_whole_genome_variant = 1 ) 
+                    AND cb_search_person.person_id IN (SELECT
+                        person_id 
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` p 
+                    WHERE
+                        has_ehr_data = 1 ) 
+                    AND cb_search_person.person_id IN (SELECT
+                        person_id 
+                    FROM
+                        `""" + os.environ["WORKSPACE_CDR"] + """.person` p 
+                    WHERE
+                        sex_at_birth_concept_id IN (45878463, 45880669) ) 
+                    AND cb_search_person.person_id IN (SELECT
+                        criteria.person_id 
+                    FROM
+                        (SELECT
+                            DISTINCT person_id, entry_date, concept_id 
+                        FROM
+                            `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_all_events` 
+                        WHERE
+                            (concept_id IN(SELECT
+                                DISTINCT c.concept_id 
+                            FROM
+                                `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` c 
+                            JOIN
+                                (SELECT
+                                    CAST(cr.id as string) AS id       
+                                FROM
+                                    `""" + os.environ["WORKSPACE_CDR"] + """.cb_criteria` cr       
+                                WHERE
+                                    concept_id IN (37032269, 40779224, 40779159)       
+                                    AND full_text LIKE '%_rank1]%'      ) a 
+                                    ON (c.path LIKE CONCAT('%.', a.id, '.%') 
+                                    OR c.path LIKE CONCAT('%.', a.id) 
+                                    OR c.path LIKE CONCAT(a.id, '.%') 
+                                    OR c.path = a.id) 
+                            WHERE
+                                is_standard = 1 
+                                AND is_selectable = 1) 
+                            AND is_standard = 1 )) criteria ) )
+            )) c_occurrence 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` c_standard_concept 
+            ON c_occurrence.condition_concept_id = c_standard_concept.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` c_type 
+            ON c_occurrence.condition_type_concept_id = c_type.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.visit_occurrence` v 
+            ON c_occurrence.visit_occurrence_id = v.visit_occurrence_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` visit 
+            ON v.visit_concept_id = visit.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` c_source_concept 
+            ON c_occurrence.condition_source_concept_id = c_source_concept.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` c_status 
+            ON c_occurrence.condition_status_concept_id = c_status.concept_id"""
+
+dataset_97719722_condition_df = pandas.read_gbq(
+    dataset_97719722_condition_sql,
+    dialect="standard",
+    use_bqstorage_api=("BIGQUERY_STORAGE_API_ENABLED" in os.environ),
+    progress_bar_type="tqdm_notebook")
+
+dataset_97719722_condition_df.head(5)
+
+# ----------------------------------------------
+# Base phenotypes (ARLD and HCC already given)
+# ----------------------------------------------
+
+ARLD_list = [
+    'Alcoholic cirrhosis',
+    'Alcoholic fatty liver',
+    'Alcoholic fibrosis and sclerosis of liver',
+    'Alcoholic hepatic failure',
+    'Alcoholic hepatitis',
+    'Alcoholic liver damage',
+    'Ascites due to alcoholic cirrhosis',
+    'Hepatic ascites due to chronic alcoholic hepatitis',
+    'Hepatic coma due to alcoholic liver failure'
+]
+
+HCC_list = [
+    'Liver cell carcinoma',
+    'Primary malignant neoplasm of liver'
+]
+
+# ----------------------------------------------
+# Tumours (includes HCC + many others)
+# ----------------------------------------------
+
+Tumours_list = (
+    HCC_list
+    + [
+        'Adenoma of liver',
+        'Angiosarcoma of liver',
+        'Benign neoplasm of liver',
+        'Benign neoplasm of liver and/or biliary ducts',
+        'Carcinoma in situ of liver and/or biliary system',
+        'Hepatoblastoma',
+        'Liver mass',
+        'Malignant neoplasm of liver',
+        'Malignant neoplasm of liver and intrahepatic bile ducts',
+        'Neoplasm of uncertain behavior of liver and/or biliary passages',
+        'Primary malignant neoplasm of ampulla of Vater',
+        'Primary malignant neoplasm of biliary tract',
+        'Primary malignant neoplasm of extrahepatic bile duct',
+        'Primary malignant neoplasm of intrahepatic bile duct',
+        'Sarcoma of liver'
+    ]
+)
+
+# ----------------------------------------------
+# Autoimmune hepatitis (AIH)
+# ----------------------------------------------
+
+AIH_list = [
+    'Autoimmune hepatitis'
+]
+
+# ----------------------------------------------
+# Any liver disease
+# ----------------------------------------------
+
+AnyLivDis_list = [
+    'Abnormal findings diagnostic imaging of liver+biliary tract'
+]
+
+# ----------------------------------------------
+# Biliary disease
+# ----------------------------------------------
+
+BiliaryDis_list = [
+    'Biliary cirrhosis',
+    'Choledochal cyst',
+    'Congenital abnormality of liver and/or biliary tract',
+    'Congenital anomaly of bile ducts',
+    'Congenital anomaly of gallbladder',
+    'Congenital biliary atresia',
+    'Congenital stricture of bile duct',
+    'Disorder of biliary tract',
+    'Primary biliary cholangitis',
+    'Primary sclerosing cholangitis',
+    'Secondary biliary cirrhosis'
+]
+
+# ----------------------------------------------
+# MASLD (formerly NAFLD)
+# ----------------------------------------------
+
+MASLD_list = [
+    'Chronic nonalcoholic liver disease',
+    'Cirrhosis - non-alcoholic',
+    'Nonalcoholic steatohepatitis',
+    'Steatohepatitis',
+    'Steatosis of liver'
+]
+
+# ----------------------------------------------
+# PBC
+# ----------------------------------------------
+
+PBC_list = ['Primary biliary cholangitis']
+
+# ----------------------------------------------
+# PSC
+# ----------------------------------------------
+
+PSC_list = ['Primary sclerosing cholangitis']
+
+# ----------------------------------------------
+# CLD (chronic liver disease)
+# Composite: ARLD + MASLD + BiliaryDis + long list below
+# ----------------------------------------------
+
+CLD_extra = [
+    'Bleeding esophageal varices',
+    'Chronic active hepatitis',
+    'Chronic hepatic failure',
+    'Chronic hepatitis',
+    'Chronic hepatitis C',
+    'Chronic liver disease',
+    'Chronic lobular hepatitis',
+    'Chronic persistent hepatitis',
+    'Cirrhosis of liver',
+    'Complication of transplanted liver',
+    'Disease of liver',
+    'Esophageal varices',
+    'Esophageal varices associated with another disorder',
+    'Esophageal varices with bleeding, associated with another disorder',
+    'Esophageal varices without bleeding',
+    'Esophageal varices without bleeding, associated with another disorder',
+    'Hepatic ascites co-occurrent with chronic active hepatitis due to toxic liver disease',
+    'Hepatic coma',
+    'Hepatic coma due to chronic hepatic failure',
+    'Hepatic encephalopathy',
+    'Hepatic failure',
+    'Hepatic fibrosis',
+    'Hepatic fibrosis with hepatic sclerosis',
+    'Hepatic sclerosis',
+    'Hepatopulmonary syndrome',
+    'Hepatorenal syndrome',
+    'Infectious cirrhosis',
+    'Liver transplant failure',
+    'Liver transplant rejection',
+    'Portal hypertension',
+    'Sequela of chronic liver disease',
+    'Toxic liver disease with cholestasis',
+    'Toxic liver disease with chronic active hepatitis',
+    'Toxic liver disease with chronic persistent hepatitis',
+    'Toxic liver disease with fibrosis and cirrhosis of liver',
+    'Transplanted liver present'
+]
+
+CLD_list = ARLD_list + MASLD_list + BiliaryDis_list + CLD_extra
+phenotype_dict = {
+    'ARLD': ARLD_list,
+    'HCC': HCC_list,
+    'Tumours': Tumours_list,
+    'AIH': AIH_list,
+    'AnyLivDis': AnyLivDis_list,
+    'BiliaryDis': BiliaryDis_list,
+    'MASLD': MASLD_list,
+    'PBC': PBC_list,
+    'PSC': PSC_list,
+    'CLD': CLD_list
+}
+df_cond = dataset_97719722_condition_df.copy()
+
+for label, namelist in phenotype_dict.items():
+    df_cond[label] = df_cond['standard_concept_name'].isin(namelist).astype(int)
+phenotype_flags = (
+    df_cond
+    .groupby('person_id')[list(phenotype_dict.keys())]
+    .max()
+    .reset_index()
+)
+
+# subset
+phenotype_cols = [
+    "ARLD", "HCC", "Tumours", "AIH", "AnyLivDis",
+    "BiliaryDis", "MASLD", "PBC", "PSC", "CLD"
+]
+
+df_cond = df_cond[ ["person_id"] + phenotype_cols ]
+df_cond.head(5)
+
+df_cond_person = df_cond.groupby("person_id").agg("max").reset_index()
+# save
+df_cond_person.to_csv("LFT_df_cond.tsv", sep = "\t")
+# merge to generate full data table
+import pandas as pd
+lft_all = pd.merge(meas_df, df_cond, on='person_id', how='outer')
+lft_all.head(5)
+
+lft_all = lft_all.drop_duplicates()
+lft_all.count()
+
+# need to add in basic demographic data
+
+import pandas
+import os
+
+# This query represents dataset "HCC_v3" for domain "person" and was generated for All of Us Controlled Tier Dataset v8
+dataset_39596433_person_sql = """
+    SELECT
+        person.person_id,
+        person.birth_datetime as date_of_birth,
+        person.ethnicity_concept_id,
+        p_ethnicity_concept.concept_name as ethnicity,
+        person.sex_at_birth_concept_id,
+        p_sex_at_birth_concept.concept_name as sex_at_birth 
+    FROM
+        `""" + os.environ["WORKSPACE_CDR"] + """.person` person 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` p_ethnicity_concept 
+            ON person.ethnicity_concept_id = p_ethnicity_concept.concept_id 
+    LEFT JOIN
+        `""" + os.environ["WORKSPACE_CDR"] + """.concept` p_sex_at_birth_concept 
+            ON person.sex_at_birth_concept_id = p_sex_at_birth_concept.concept_id  
+    WHERE
+        person.PERSON_ID IN (SELECT
+            distinct person_id  
+        FROM
+            `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` cb_search_person  
+        WHERE
+            cb_search_person.person_id IN (SELECT
+                person_id 
+            FROM
+                `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` p 
+            WHERE
+                has_whole_genome_variant = 1 ) 
+            AND cb_search_person.person_id IN (SELECT
+                person_id 
+            FROM
+                `""" + os.environ["WORKSPACE_CDR"] + """.cb_search_person` p 
+            WHERE
+                has_ehr_data = 1 ) 
+            AND cb_search_person.person_id IN (SELECT
+                person_id 
+            FROM
+                `""" + os.environ["WORKSPACE_CDR"] + """.person` p 
+            WHERE
+                sex_at_birth_concept_id IN (45878463, 45880669) ) )"""
+
+dataset_39596433_person_df = pandas.read_gbq(
+    dataset_39596433_person_sql,
+    dialect="standard",
+    use_bqstorage_api=("BIGQUERY_STORAGE_API_ENABLED" in os.environ),
+    progress_bar_type="tqdm_notebook")
+
+dataset_39596433_person_df.head(5)
+
+# edit the demographics df
+demog_df = dataset_39596433_person_df.copy()
+import pandas as pd
+demog_df["date_of_birth"] = pd.to_datetime(demog_df["date_of_birth"])
+ref_date = pd.to_datetime("2010-01-01").tz_localize("UTC")
+demog_df["age"] = (ref_date - demog_df["date_of_birth"]).dt.days / 365.25
+demog_df.head(5)
+
+demog_df.loc[(demog_df['sex_at_birth'] == 'Male'), 'is_male'] = 1
+demog_df.loc[~(demog_df['sex_at_birth'] == 'Male'), 'is_male'] = 0
+demog_df.is_male.value_counts()
+
+# subset
+demog_cols = [
+    "is_male", "age"
+]
+
+demog_df = demog_df[ ["person_id"] + demog_cols ]
+demog_df.head(5)
+
+# merge to generate full data table
+import pandas as pd
+lft_full = pd.merge(lft_all, demog_df, on='person_id', how='outer')
+lft_full.head(5)
+
+# replace NaN with 0 for the pheno columns
+phenotype_cols = ['ARLD','HCC','Tumours','AIH','AnyLivDis','BiliaryDis','MASLD','PBC','PSC','CLD']
+lft_full[phenotype_cols] = lft_full[phenotype_cols].fillna(0).astype(int)
+lft_full.count()
+
+# save
+lft_full.to_csv("monogen_full_data.tsv", sep = "\t")
+import os
+bucket = os.getenv("WORKSPACE_BUCKET")
+bucket
+
+
+# save to workspace bucket
+!gsutil -m cp monogen_full_data.tsv {bucket}/data/
+
+# check if file is saved to workspace bucket
+!gsutil -m ls {bucket}/data/
+
+
+####### analysis
+
+from datetime import datetime
+start = datetime.now()
+import os
+bucket = os.getenv("WORKSPACE_BUCKET")
+bucket
+
+import hail as hl
+hl.init(default_reference = "GRCh38")
+
+
+# get path of the genomic data we want to analyze
+mt_path = os.getenv("WGS_CLINVAR_SPLIT_HAIL_PATH")
+mt_path
+'gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/clinvar/splitMT/hail.mt'
+# hardcode the path in case you are not working in a v7 CT workspace
+#mt_path = 'gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/exome/multiMT/hail.mt'
+# load genomic data into hail
+mt = hl.read_matrix_table(mt_path)
+Explore Hail MatrixTable
+2.1 Explore Hail MatriTable
+
+# get number of variants and samples in the mt
+#mt.count()
+# uncomment the command below to show first 5 columns if you have a RW account
+#mt.col.show(5)
+# uncomment the command below to show GT status of the first 4 participants for first 5 variants if you have a RW account
+#mt.GT.show(n_rows=5, n_cols=4)
+#mt.row.show(5)
+intervals = [
+    "chr2:168958145-168958146",
+    "chr2:169013391-169013392",
+    "chr2:169077231-169077232",
+    "chr2:168964291-168964292",
+    "chr2:169026708-169026709",
+    "chr7:87431528-87431529",
+    "chr7:87445103-87445104",
+    "chr7:87482342-87482343",
+    "chr10:99804058-99804059",
+    "chr10:99830729-99830730",
+    "chr10:99836239-99836240",
+    "chr10:100057584-100057585",
+    "chr10:99761184-99761185",
+    "chr6:135097778-135097779",
+    "chr9:101442332-101442333",
+    "chr6:131678442-131678443",
+    "chr7:66010747-66010748",
+    "chr6:24504968-24504969",
+    "chr9:130382669-130382670",
+    "chr18:57651798-57651799",
+    "chr18:57784141-57784142",
+    "chr18:57646765-57646766",
+    "chr18:57757844-57757845",
+    "chr2:218664625-218664626",
+    "chr2:218323178-218323179",
+    "chr7:117279924-117279925",
+    "chr2:210675783-210675784",
+    "chr6:24167520-24167521",
+    "chr6:24205008-24205009",
+    "chr6:24289365-24289366",
+    "chr6:24361976-24361977",
+    "chr6:24462792-24462793",
+    "chr17:75828040-75828041",
+    "chr11:62646190-62646191",
+    "chr6:25917997-25917998",
+    "chr6:26090951-26090952",
+    "chr11:119032131-119032132",
+    "chr11:119086678-119086679",
+    "chr17:37713312-37713313",
+    "chr17:37718512-37718513",
+    "chr16:30992848-30992849",
+    "chr20:10996306-10996307",
+    "chr20:10641853-10641854",
+    "chr20:10656409-10656410",
+    "chr9:114106297-114106298",
+    "chr10:89247713-89247714",
+    "chr10:89307012-89307013",
+    "chr12:57472038-57472039",
+    "chr15:74785026-74785027",
+    "chr1:119918630-119918631",
+    "chr18:23537455-23537456",
+    "chr18:23536736-23536737",
+    "chr14:74962890-74962891",
+    "chr14:74556927-74556928",
+    "chr12:100532530-100532531",
+    "chr12:100438440-100438441",
+    "chr12:100511778-100511779",
+    "chr7:92594204-92594205",
+    "chr22:17959047-17959048",
+    "chr6:42964464-42964465",
+    "chr16:2094893-2094894",
+    "chr16:2103764-2103765",
+    "chr16:2108418-2108419",
+    "chr16:2135583-2135584",
+    "chr16:2111149-2111150",
+    "chr4:88050899-88050900",
+    "chr14:94378225-94378226",
+    "chr14:94378610-94378611",
+    "chr14:94380925-94380926",
+    "chr13:103064473-103064474",
+    "chr7:100621008-100621009",
+    "chr10:100978794-100978795",
+    "chr2:233275771-233275772",
+    "chr2:233356202-233356203",
+    "chr2:233573604-233573605",
+    "chr2:233595452-233595453",
+    "chr2:233718890-233718891",
+    "chr2:233757136-233757137",
+    "chr2:233767763-233767764",
+    "chr2:233675678-233675679",
+    "chr16:68787043-68787044",
+    "chr1:32978534-32978535",
+]
+# filter table
+
+interval_objs = [hl.parse_locus_interval(i) for i in intervals]
+
+mt_filt = hl.filter_intervals(mt, interval_objs)
+#mt_filt.count()
+#mt_filt.row.show(5)
+# define exact variants
+variants_list = [
+    ("chr2:168958145", ["G","T"]),
+    ("chr2:169013391", ["A","G"]),
+    ("chr2:169077231", ["G","A"]),
+    ("chr2:168964291", ["C","T"]),
+    ("chr2:169026708", ["C","T"]),
+    ("chr7:87431528", ["C","T"]),
+    ("chr7:87445103", ["T","C"]),
+    ("chr7:87482342", ["T","C"]),
+    ("chr10:99804058", ["G","A"]),
+    ("chr10:99830729", ["G","A"]),
+    ("chr10:99836239", ["T","A"]),
+    ("chr10:100057584", ["A","G"]),
+    ("chr10:99761184", ["G","A"]),
+    ("chr6:135097778", ["A","G"]),
+    ("chr9:101442332", ["C","T"]),
+    ("chr6:131678442", ["G","A"]),
+    ("chr7:66010747", ["C","T"]),
+    ("chr6:24504968", ["G","T"]),
+    ("chr9:130382669", ["C","T"]),
+    ("chr18:57651798", ["AT","A"]),
+    ("chr18:57784141", ["G","T"]),
+    ("chr18:57646765", ["C","T"]),
+    ("chr18:57757844", ["A","C"]),
+    ("chr2:218664625", ["C","T"]),
+    ("chr2:218323178", ["C","T"]),
+    ("chr7:117279924", ["G","A"]),
+    ("chr2:210675783", ["C","A"]),
+    ("chr6:24167520", ["T","C"]),
+    ("chr6:24205008", ["G","A"]),
+    ("chr6:24289365", ["C","T"]),
+    ("chr6:24361976", ["T","C"]),
+    ("chr6:24462792", ["G","C"]),
+    ("chr17:75828040", ["T","C"]),
+    ("chr11:62646190", ["C","T"]),
+    ("chr6:25917997", ["T","C"]),
+    ("chr6:26090951", ["C","G"]),
+    ("chr11:119032131", ["C","T"]),
+    ("chr11:119086678", ["A","T"]),
+    ("chr17:37713312", ["C","A"]),
+    ("chr17:37718512", ["G","A"]),
+    ("chr16:30992848", ["T","C"]),
+    ("chr20:10996306", ["A","G"]),
+    ("chr20:10641853", ["G","C"]),
+    ("chr20:10656409", ["T","C"]),
+    ("chr9:114106297", ["C","A"]),
+    ("chr10:89247713", ["C","A"]),
+    ("chr10:89307012", ["C","A"]),
+    ("chr12:57472038", ["G","C"]),
+    ("chr15:74785026", ["C","A"]),
+    ("chr1:119918630", ["C","T"]),
+    ("chr18:23537455", ["G","T"]),
+    ("chr18:23536736", ["A","G"]),
+    ("chr14:74962890", ["A","G"]),
+    ("chr14:74556927", ["A","G"]),
+    ("chr12:100532530", ["T","C"]),
+    ("chr12:100438440", ["G","A"]),
+    ("chr12:100511778", ["T","C"]),
+    ("chr7:92594204", ["A","C"]),
+    ("chr22:17959047", ["G","A"]),
+    ("chr6:42964464", ["C","T"]),
+    ("chr16:2094893", ["G","A"]),
+    ("chr16:2103764", ["G","A"]),
+    ("chr16:2108418", ["G","A"]),
+    ("chr16:2135583", ["G","T"]),
+    ("chr16:2111149", ["G","A"]),
+    ("chr4:88050899", ["G","A"]),
+    ("chr14:94378225", ["C","T"]),
+    ("chr14:94378610", ["C","T"]),
+    ("chr14:94380925", ["T","A"]),
+    ("chr13:103064473", ["A","G"]),
+    ("chr7:100621008", ["C","T"]),
+    ("chr10:100978794", ["A","G"]),
+    ("chr2:233275771", ["G","A"]),
+    ("chr2:233356202", ["C","G"]),
+    ("chr2:233573604", ["C","T"]),
+    ("chr2:233595452", ["C","T"]),
+    ("chr2:233718890", ["C","A"]),
+    ("chr2:233757136", ["G","A"]),
+    ("chr2:233767763", ["C","T"]),
+    ("chr2:233675678", ["T","C"]),
+    ("chr16:68787043", ["G","A"]),
+    ("chr1:32978534", ["C","T"]),
+]
+# filter for specific variants
+mt_variants = mt_filt.filter_rows(
+    hl.any(lambda v: (mt_filt.locus == hl.parse_locus(v[0], 'GRCh38')) &
+                     (mt_filt.alleles[0] == v[1][0]) &
+                     (mt_filt.alleles[1] == v[1][1]),
+           variants_list)
+)
+#mt_variants.count()
+#mt_variants.row.show(5)
+# get var AF annotation table:
+var_info = mt_variants.rows().select("info")
+#var_info.show(5)
+Sample QC
+2.2 Sample QC
+
+remove related samples
+# get path of file containing list of related samples
+!gsutil -u $GOOGLE_PROJECT -m ls gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/relatedness/
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/relatedness/relatedness.tsv
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/relatedness/relatedness_flagged_samples.tsv
+# read the relatedness file using Hail
+samples_to_remove_list = "gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/relatedness/relatedness_flagged_samples.tsv"
+samples_to_remove = hl.import_table(samples_to_remove_list, key = "sample_id")
+[Stage 0:>                                                          (0 + 1) / 1]
+# remove samples from the MatrixTable
+mt_variants = mt_variants.anti_join_cols(samples_to_remove)
+#mt_variants.count()
+Variant QC
+2.3 Variant QC
+
+keep variants with minor allele frequency grearer than 0.01
+# recompute AF
+mt_variants = mt_variants.annotate_rows(info = hl.agg.call_stats(mt_variants.GT, mt_variants.alleles))
+# keep variants with minor allele frequency (maf) greater than 0.01
+#mt = mt.filter_rows(hl.min(mt.info.AF) > 0.01, keep = True)
+#mt.count()
+Load phenotypic data
+3. Load phenotypic data
+
+# Population stratification
+# get path of the gentic predicted ancestry file
+!gsutil -u $GOOGLE_PROJECT -m ls gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/ancestry/
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/ancestry/ancestry_preds.tsv
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/ancestry/eigenvalues.txt
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/ancestry/merged_sites_only_intersection.vcf.bgz
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/ancestry/merged_sites_only_intersection.vcf.bgz.tbi
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/ancestry/preds_oth.html
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/ancestry/rf_classifier.pkl
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/ancestry/training_pca.tsv
+gs://fc-aou-datasets-controlled/v8/wgs/short_read/snpindel/aux/ancestry/loadings.ht/
+# read ancestry file using Hail
+ancestry_pred_path = ""
+ancestry_pred = hl.import_table(ancestry_pred_path,
+                               key="research_id", 
+                               impute=True, 
+                               types={"research_id":"tstr","pca_features":hl.tarray(hl.tfloat)})
+[Stage 4:>                                                          (0 + 1) / 1]
+# link ancestry file to MatrixTable
+mt_ancestry = mt_variants.annotate_cols(ancestry_pred = ancestry_pred[mt_variants.s])
+# original mt
+#mt.col.describe()
+# mt after adding ancestry info
+#mt_ancestry.col.describe()
+# check counts
+#mt_ancestry.count()
+#mt_ancestry.row.show(5)
+4. Link phenotypic data to genomic data
+
+# get path to workspace bucket
+import os
+bucket = os.getenv("WORKSPACE_BUCKET")
+bucket
+
+# list all files in the bucket subfolder `data`
+!gsutil ls {bucket}/data/
+
+# read pheno file
+phenotype_filename = f"{bucket}/data/monogen_full_data.tsv"
+
+phenotypes = (hl.import_table(phenotype_filename,
+                              types={'person_id':hl.tstr},
+                              impute=True,
+                              key='person_id')
+             )
+[Stage 7:>                                                          (0 + 1) / 1]
+# check data
+
+import pandas as pd
+
+# Read the phenotype file from the bucket
+phenotype_filename = f"{bucket}/data/monogen_full_data.tsv"
+df = pd.read_csv(phenotype_filename, sep="\t")
+
+# Convert columns to numeric if needed
+df['ALT'] = pd.to_numeric(df['ALT'], errors='coerce')
+
+# Quick check of mean and SD
+mean_alt = df['ALT'].mean()
+sd_alt = df['ALT'].std()
+
+print("ALT mean:", mean_alt)
+print("ALT SD:", sd_alt)
+ALT mean: 23.958362572062214
+ALT SD: 10.41559132178296
+# link pheno file to MatrixTable
+mt_pheno = mt_ancestry.annotate_cols(pheno = phenotypes[mt_ancestry.s])
+#mt_pheno.col.describe()
+# save the mt_table
+#mt_pheno.write(f"{bucket}/data/monogen_pheno.ht", overwrite=True)
+# check if file is saved to workspace bucket
+#!gsutil -m ls {bucket}/data/
+# get counts of cases/controls in final analysis table
+# Count number of 0s and 1s in pheno.CLD
+cld_counts = (
+    mt_pheno.aggregate_cols(
+        hl.agg.counter(mt_pheno.pheno.CLD)
+    )
+)
+
+print(cld_counts)
+[Stage 10:>                                                         (0 + 1) / 1]
+{0: 261806, 1: 29952, None: 92488}
+#mt_pheno.count()
+
+mt.rows().key
+<StructExpression of type struct{locus: locus<GRCh38>, alleles: array<str>}>
+var_info.key
+<StructExpression of type struct{locus: locus<GRCh38>, alleles: array<str>}>
+# set covariates
+covariates = [1.0, mt_pheno.pheno.is_male,
+              mt_pheno.pheno.age,
+              mt_pheno.ancestry_pred.pca_features[0],
+              mt_pheno.ancestry_pred.pca_features[1],
+              mt_pheno.ancestry_pred.pca_features[2],
+              mt_pheno.ancestry_pred.pca_features[3],
+              mt_pheno.ancestry_pred.pca_features[4],
+              mt_pheno.ancestry_pred.pca_features[5],
+              mt_pheno.ancestry_pred.pca_features[6],
+              mt_pheno.ancestry_pred.pca_features[7],
+              mt_pheno.ancestry_pred.pca_features[8]]
+# make a loop to run through all the phenotypes
+# Categorical → logistic regression
+binary_phenos = [
+    "ARLD", "HCC", "Tumours", "AIH", "AnyLivDis", 
+    "BiliaryDis", "MASLD", "PBC", "PSC", "CLD"
+]
+
+# Continuous → linear regression
+quant_phenos = [
+    "ALP", "ALT", "AST", "ConjBili", "TotBili"
+]
+# for binary phenotypes
+import os
+
+bucket = os.getenv("WORKSPACE_BUCKET")
+output_dir = f"{bucket}/data/"
+
+results = {}
+
+for pheno in binary_phenos:
+    print(f"Running logistic regression for {pheno}...")
+
+    lr = hl.logistic_regression_rows(
+        test='wald',
+        y = mt_pheno.pheno[pheno],
+        x = mt_pheno.GT.n_alt_alleles(),
+        covariates = covariates
+    )
+
+    # Add variant info
+    lr = lr.key_by('locus', 'alleles')
+    lr = lr.join(var_info, how='left')
+
+    # Select and annotate required fields
+    lr_sum = lr.select(
+    beta = lr.beta,
+    standard_error = lr.standard_error,
+    z_stat = lr.z_stat,
+    p_value = lr.p_value,
+    AF = lr.info.AF,
+    A1 = lr.alleles[0],
+    A2 = lr.alleles[1]
+    )
+
+
+    # Convert to pandas
+    pdf = lr_sum.to_pandas()
+    results[pheno] = pdf
+
+    # Save locally
+    filename = f"{pheno}_sumstats.txt"
+    pdf.to_csv(filename, sep="\t", index=False)
+
+    # Upload to Google bucket
+    !gsutil -m cp $filename $output_dir
+
+
+# linear reg for continuous phenos
+for pheno in quant_phenos:
+    print(f"Running linear regression for {pheno}...")
+
+    # Convert empty strings or None to missing, then cast to float
+    y = hl.if_else(
+        (mt_pheno.pheno[pheno] == "") | hl.is_missing(mt_pheno.pheno[pheno]),
+        hl.missing(hl.tfloat64),
+        hl.float(mt_pheno.pheno[pheno])
+    )
+
+    lr = hl.linear_regression_rows(
+        y = y,
+        x = mt_pheno.GT.n_alt_alleles(),
+        covariates = covariates
+    )
+
+    # Add variant info
+    lr = lr.key_by('locus', 'alleles')
+    lr = lr.join(var_info, how='left')
+
+    # Select fields
+    lr_sum = lr.select(
+        "beta", "standard_error", "t_stat", "p_value",
+        AF = lr.info.AF,
+        A1 = lr.alleles[0],
+        A2 = lr.alleles[1]
+    )
+
+    # Convert to pandas and save
+    pdf = lr_sum.to_pandas()
+    pdf.to_csv(f"{pheno}_sumstats.txt", sep="\t", index=False)
+
+
+
+    # Upload to GCS
+    !gsutil -m cp $filename $output_dir
+
+PRS
+# make a simple, unweighted PRS
+# sum all the alt alleles
+# Create a PRS table: sum of alt alleles for each individual
+mt_with_prs = mt_pheno.annotate_cols(
+    PRS = hl.agg.sum(mt_pheno.GT.n_alt_alleles())
+)
+# extract the table
+prs_ht = mt_with_prs.cols()
+#prs_ht.show(5)
+# fix string phenos
+numeric_phenos = ["BMI","Chol","DBP","HDL","LDL","SBP","TG",
+                  "ALP","ALT","AST","ConjBili","TotBili"]
+
+prs_ht = prs_ht.annotate(
+    pheno = prs_ht.pheno.annotate(**{
+        ph: hl.or_missing(prs_ht.pheno[ph] != "", hl.float(prs_ht.pheno[ph]))
+        for ph in numeric_phenos
+    })
+)
+import pandas as pd
+
+# Convert entire Hail Table to Pandas
+df = prs_ht.to_pandas()
+[Stage 95:=================================================>      (28 + 4) / 32]
+# Flatten column names
+df.columns = [col.replace("pheno.", "").replace("ancestry_pred.", "") for col in df.columns]
+
+df.head(5)
+
+# Save locally
+df.to_csv("PRS_table_monogen.txt", sep="\t", index=False)
+
+# Upload to Google bucket
+!gsutil -m cp PRS_table_monogen.txt "{bucket}/data/"
+
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+
+# Columns
+binary_phenos = ["ARLD","HCC","Tumours","AIH","AnyLivDis","BiliaryDis","MASLD","PBC","PSC","CLD"]
+quant_phenos  = ["ALP","ALT","AST","ConjBili","TotBili"]
+
+# Ensure numeric: coerce errors to NaN
+for col in binary_phenos + quant_phenos + ["PRS", "age", "is_male"]:
+    # Convert any arrays stored as strings into NaN
+    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+# Binary phenotypes: fill missing with 0 and convert to int
+for col in binary_phenos:
+    df[col] = df[col].fillna(0).astype(int)
+
+# Quantitative phenotypes: keep as float
+for col in quant_phenos:
+    df[col] = df[col].astype(float)
+
+# Quick check
+print(df[binary_phenos + quant_phenos + ["PRS", "age", "is_male"]].dtypes)
+
+
+
+df_clean = df.dropna(subset=['age', 'is_male'])
+# example log reg
+
+import statsmodels.api as sm
+
+# Ensure all predictors are numeric
+X = df_clean[['PRS', 'age', 'is_male']].astype(float)
+
+# Add intercept
+X = sm.add_constant(X)
+
+y = df_clean['CLD'].astype(float)  # 0/1
+X = df_clean[['PRS', 'age', 'is_male']].astype(float)
+X = sm.add_constant(X)
+
+logit_model = sm.Logit(y, X).fit()
+print(logit_model.summary())
+
+import pandas as pd
+import statsmodels.api as sm
+
+# List of binary phenotypes
+binary_phenos = ['ARLD', 'HCC', 'Tumours', 'AIH', 'AnyLivDis', 
+                 'BiliaryDis', 'MASLD', 'PBC', 'PSC', 'CLD']
+
+# Predictors
+predictors = ['PRS', 'age', 'is_male']
+
+# Ensure predictors are numeric
+df_clean[predictors] = df_clean[predictors].apply(pd.to_numeric, errors='coerce')
+
+# Initialize summary list
+results = []
+
+for pheno in binary_phenos:
+    print(f"Running logistic regression for {pheno}...")
+    
+    # Convert outcome to numeric and drop rows with missing values
+    df_model = df_clean.copy()
+    df_model[pheno] = pd.to_numeric(df_model[pheno], errors='coerce')
+    df_model = df_model.dropna(subset=predictors + [pheno])
+    
+    X = sm.add_constant(df_model[predictors].astype(float))
+    y = df_model[pheno].astype(float)
+    
+    logit_model = sm.Logit(y, X).fit(disp=0)  # disp=0 suppresses output
+    
+    # Extract coefficients, standard errors, p-values
+    for var in ['const'] + predictors:
+        results.append({
+            'phenotype': pheno,
+            'variable': var,
+            'coef': logit_model.params[var],
+            'std_err': logit_model.bse[var],
+            'z_stat': logit_model.tvalues[var],
+            'p_value': logit_model.pvalues[var]
+        })
+
+# Convert to DataFrame
+logit_summary = pd.DataFrame(results)
+logit_summary.head()
+
+# Convert to pandas and save
+    logit_summary.to_csv("logit_summary_monogen.txt", sep="\t", index=False)
+
+    # Upload to GCS
+    !gsutil -m cp logit_summary_monogen.txt "{bucket}/data/"
+
+
+# make a figure
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Choose phenotype and binning
+phenotype = 'MASLD'  # or 'MASLD'
+n_bins = 10  # e.g., deciles
+
+# Make sure columns are numeric
+df_clean['PRS'] = pd.to_numeric(df_clean['PRS'], errors='coerce')
+df_clean[phenotype] = pd.to_numeric(df_clean[phenotype], errors='coerce')
+
+# Drop missing PRS or phenotype
+df_plot = df_clean.dropna(subset=['PRS', phenotype]).copy()
+
+# Create PRS bins safely
+df_plot['PRS_bin'] = pd.qcut(df_plot['PRS'], q=n_bins, labels=False, duplicates='drop')
+
+
+# Compute % with phenotype in each bin
+bin_summary = df_plot.groupby('PRS_bin')[phenotype].mean() * 100
+bin_summary = bin_summary.reset_index()
+bin_summary.rename(columns={phenotype: f'{phenotype}_percent'}, inplace=True)
+
+# Plot
+plt.figure(figsize=(8,5))
+sns.barplot(x='PRS_bin', y=f'{phenotype}_percent', data=bin_summary, palette='viridis')
+plt.xlabel('PRS bin')
+plt.ylabel(f'% of individuals with {phenotype}')
+plt.title(f'{phenotype} prevalence across monogenic PRS bins')
+plt.ylim(4.5, 5.2)  # min and max values for y-axis
+
+
+# Save the figure
+plt.savefig("MASLD_by_PRS_bin.png", dpi=300, bbox_inches='tight')  # PNG file, high resolution
+plt.savefig("MASLD_by_PRS_bin.pdf", bbox_inches='tight')  # PDF file
+plt.show()
+
+# Convert to numeric in case there are strings or missing values
+alt_vals = pd.to_numeric(df_clean['ALT'], errors='coerce').dropna()
+
+# Compute mean and standard deviation
+print("Mean ALT:", alt_vals.mean())
+print("SD ALT:", alt_vals.std())
+
+##### make a table
+
+# load data
+import os
+bucket = os.getenv("WORKSPACE_BUCKET")
+
+!gsutil ls {bucket}/data/
+
+# PRS table
+df = pd.read_csv(f"{bucket}/data/PRS_table_monogen.txt", sep="\t")
+df.head()
+
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+
+# Columns
+binary_phenos = ["ARLD","HCC","Tumours","AIH","AnyLivDis","BiliaryDis","MASLD","PBC","PSC","CLD"]
+quant_phenos  = ["ALP","ALT","AST","ConjBili","TotBili"]
+
+# Ensure numeric: coerce errors to NaN
+for col in binary_phenos + quant_phenos + ["PRS", "age", "is_male"]:
+    # Convert any arrays stored as strings into NaN
+    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+# Binary phenotypes: fill missing with 0 and convert to int
+for col in binary_phenos:
+    df[col] = df[col].fillna(0).astype(int)
+
+# Quantitative phenotypes: keep as float
+for col in quant_phenos:
+    df[col] = df[col].astype(float)
+
+# Quick check
+print(df[binary_phenos + quant_phenos + ["PRS", "age", "is_male"]].dtypes)
+
+
+df_clean = df.dropna(subset=['age', 'is_male'])
+# example log reg
+
+import statsmodels.api as sm
+
+# Ensure all predictors are numeric
+X = df_clean[['PRS', 'age', 'is_male']].astype(float)
+
+# Add intercept
+X = sm.add_constant(X)
+
+y = df_clean['CLD'].astype(float)  # 0/1
+X = df_clean[['PRS', 'age', 'is_male']].astype(float)
+X = sm.add_constant(X)
+
+logit_model = sm.Logit(y, X).fit()
+print(logit_model.summary())
+
+import pandas as pd
+import statsmodels.api as sm
+
+# List of binary phenotypes
+binary_phenos = ['ARLD', 'HCC', 'Tumours', 'AIH', 'AnyLivDis', 
+                 'BiliaryDis', 'MASLD', 'PBC', 'PSC', 'CLD']
+
+# Predictors
+predictors = ['PRS', 'age', 'is_male']
+
+# Ensure predictors are numeric
+df_clean[predictors] = df_clean[predictors].apply(pd.to_numeric, errors='coerce')
+
+# Initialize summary list
+results = []
+
+for pheno in binary_phenos:
+    print(f"Running logistic regression for {pheno}...")
+    
+    # Convert outcome to numeric and drop rows with missing values
+    df_model = df_clean.copy()
+    df_model[pheno] = pd.to_numeric(df_model[pheno], errors='coerce')
+    df_model = df_model.dropna(subset=predictors + [pheno])
+    
+    X = sm.add_constant(df_model[predictors].astype(float))
+    y = df_model[pheno].astype(float)
+    
+    logit_model = sm.Logit(y, X).fit(disp=0)  # disp=0 suppresses output
+    
+    # Extract coefficients, standard errors, p-values
+    for var in ['const'] + predictors:
+        results.append({
+            'phenotype': pheno,
+            'variable': var,
+            'coef': logit_model.params[var],
+            'std_err': logit_model.bse[var],
+            'z_stat': logit_model.tvalues[var],
+            'p_value': logit_model.pvalues[var]
+        })
+
+# Convert to DataFrame
+logit_summary = pd.DataFrame(results)
+logit_summary.head()
+
+# Convert to pandas and save
+    logit_summary.to_csv("logit_summary_monogen.txt", sep="\t", index=False)
+
+    # Upload to GCS
+    !gsutil -m cp logit_summary_monogen.txt "{bucket}/data/"
+
+# make a figure
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Choose phenotype and binning
+phenotype = 'MASLD'  # or 'MASLD'
+n_bins = 10  # e.g., deciles
+
+# Make sure columns are numeric
+df_clean['PRS'] = pd.to_numeric(df_clean['PRS'], errors='coerce')
+df_clean[phenotype] = pd.to_numeric(df_clean[phenotype], errors='coerce')
+
+# Drop missing PRS or phenotype
+df_plot = df_clean.dropna(subset=['PRS', phenotype]).copy()
+
+# Create PRS bins safely
+df_plot['PRS_bin'] = pd.qcut(df_plot['PRS'], q=n_bins, labels=False, duplicates='drop')
+
+
+# Compute % with phenotype in each bin
+bin_summary = df_plot.groupby('PRS_bin')[phenotype].mean() * 100
+bin_summary = bin_summary.reset_index()
+bin_summary.rename(columns={phenotype: f'{phenotype}_percent'}, inplace=True)
+
+# Plot
+plt.figure(figsize=(8,5))
+sns.barplot(x='PRS_bin', y=f'{phenotype}_percent', data=bin_summary, palette='viridis')
+plt.xlabel('PRS bin')
+plt.ylabel(f'% of individuals with {phenotype}')
+plt.title(f'{phenotype} prevalence across monogenic PRS bins')
+plt.ylim(4.5, 5.2)  # min and max values for y-axis
+
+
+# Save the figure
+plt.savefig("MASLD_by_PRS_bin.png", dpi=300, bbox_inches='tight')  # PNG file, high resolution
+plt.savefig("MASLD_by_PRS_bin.pdf", bbox_inches='tight')  # PDF file
+plt.show()
+
+# Convert to numeric in case there are strings or missing values
+alt_vals = pd.to_numeric(df_clean['ALT'], errors='coerce').dropna()
+
+# Compute mean and standard deviation
+print("Mean ALT:", alt_vals.mean())
+print("SD ALT:", alt_vals.std())
+Mean ALT: 23.282676134551952
+SD ALT: 10.004826019327167
+import pandas as pd
+import numpy as np
+from scipy import stats
+
+# Make sure PRS numeric
+df_clean['PRS'] = pd.to_numeric(df_clean['PRS'], errors='coerce')
+
+# If PRS has NaNs, drop them for quartile assignment (or use dropna=False if you prefer)
+df_for_bins = df_clean.dropna(subset=['PRS']).copy()
+
+# Create PRS quartiles robustly; allow duplicates to be dropped if necessary
+n_q = 4
+try:
+    df_for_bins['PRS_quartile'] = pd.qcut(df_for_bins['PRS'], q=n_q, labels=[f"Q{i}" for i in range(1, n_q+1)], duplicates='raise')
+except ValueError:
+    # fallback: drop duplicate edges
+    df_for_bins['PRS_quartile'] = pd.qcut(df_for_bins['PRS'], q=n_q, labels=[f"Q{i}" for i in range(1, n_q+1)], duplicates='drop')
+
+# Merge the quartile column back into df_clean (so rows with missing PRS keep NaN quartile)
+df_clean = df_clean.merge(df_for_bins[['PRS_quartile']], left_index=True, right_index=True, how='left')
+
+# Now compute totals per quartile (exclude NaN quartile)
+quartile_totals = df_clean.groupby('PRS_quartile').size().to_dict()
+all_total = df_clean.shape[0]
+
+quant_phenos = ['ALP','ALT','AST','ConjBili','TotBili', 'BMI']
+
+summary_list = []
+
+for pheno in quant_phenos:
+    row = {'Trait': pheno}
+    
+    for q in ['Q1','Q2','Q3','Q4']:
+        # select rows in that quartile, coerce pheno to numeric and drop NaN
+        vals = pd.to_numeric(df_clean.loc[df_clean['PRS_quartile']==q, pheno], errors='coerce').dropna()
+        row[f'{q}_mean'] = vals.mean()
+        row[f'{q}_sd']   = vals.std()
+        
+        # male count: coerce to numeric first to avoid strings
+        male_vals = pd.to_numeric(df_clean.loc[df_clean['PRS_quartile']==q, 'is_male'], errors='coerce').dropna()
+        row[f'{q}_male_count'] = int(male_vals.sum()) if len(male_vals) > 0 else 0
+        
+        # total individuals (including those with missing pheno) in this quartile
+        row[f'{q}_total'] = int(quartile_totals.get(q, 0))
+    
+    row['All_total'] = int(all_total)
+    
+    # ANOVA p-value across quartiles (use only non-empty groups)
+    groups = [pd.to_numeric(df_clean.loc[df_clean['PRS_quartile']==q, pheno], errors='coerce').dropna()
+              for q in ['Q1','Q2','Q3','Q4']]
+    non_empty_groups = [g for g in groups if len(g) > 0]
+    if len(non_empty_groups) >= 2:  # need at least 2 groups for ANOVA
+        f_val, p_val = stats.f_oneway(*non_empty_groups)
+    else:
+        p_val = np.nan
+    row['p_value'] = p_val
+    
+    summary_list.append(row)
+
+summary_df = pd.DataFrame(summary_list)
+
+# reorder columns
+cols = ['Trait'] + \
+       [f'{q}_mean' for q in ['Q1','Q2','Q3','Q4']] + \
+       [f'{q}_sd' for q in ['Q1','Q2','Q3','Q4']] + \
+       [f'{q}_male_count' for q in ['Q1','Q2','Q3','Q4']] + \
+       [f'{q}_total' for q in ['Q1','Q2','Q3','Q4']] + \
+       ['All_total', 'p_value']
+summary_df = summary_df.loc[:, cols]
+
+summary_df
+
+# Convert to pandas and save
+summary_df.to_csv("monogen_summary_df.txt", sep="\t", index=False)
+
+    # Upload to GCS
+!gsutil -m cp monogen_summary_df.txt "{bucket}/data/"
+
+###### processing in R for further manipulation
+
+library(tidyverse)
+
+# 1. Folder containing your sumstats files
+sumstats_dir <- "/Users/jakemann/Documents/MonogenLiveR/AOU_sumstats_new"  # e.g., "./sumstats"
+
+# 2. List all files ending with "_sumstats.txt"
+files <- list.files(sumstats_dir, pattern = "_sumstats\\.txt$", full.names = TRUE)
+
+# 3. Function to read a single file and annotate phenotype
+read_sumstats <- function(file_path) {
+  # Extract phenotype from file name
+  pheno <- str_extract(basename(file_path), "^[^_]+")
+  
+  # Read the file
+  df <- read_tsv(file_path, col_types = cols(
+    locus = col_character(),
+    alleles = col_character(),   # will read as string; can parse to list later if needed
+    beta = col_double(),
+    standard_error = col_double(),
+    z_stat = col_double(),
+    p_value = col_double(),
+    AF = col_character(),       # array<float64> column as string
+    A1 = col_character(),
+    A2 = col_character()
+  ))
+  
+  # Add phenotype column
+  df <- df %>% mutate(phenotype = pheno)
+  
+  return(df)
+}
+
+# 4. Read and combine all files
+combined_sumstats <- map_dfr(files, read_sumstats)
+
+### tidy the table
+library(dplyr)
+library(stringr)
+
+# Bonferroni threshold
+bonf <- 0.05 / 35
+
+combined_clean <- combined_sumstats %>%
+  # Remove t_stat and z_stat
+  select(-t_stat, -z_stat) %>%
+  
+  # Clean AF: remove [ ] and convert to numeric
+  mutate(AF = str_remove_all(AF, "\\[|\\]"),
+         AF = as.numeric(AF)) %>%
+  
+  # Create Beta(SE) formatted column
+  mutate(Beta_SE = sprintf("%.4f (%.4f)", beta, standard_error)) %>%
+  
+  # Reorder columns: phenotype first, Beta_SE next
+  select(
+    phenotype,
+    locus,
+    A1, A2,
+    AF,
+    Beta_SE,
+    p_value,
+    everything(),
+    -beta, -standard_error, -alleles  # remove original beta + SE
+  ) %>%
+  
+  # Filter significant results
+  filter(p_value < bonf)
+
+library(data.table)
+fwrite(combined_clean, "monogen_AOU_vartab.txt", sep="\t")
+
+
+#######
+logit_sum <- fread("/Users/jakemann/Documents/MonogenLiveR/AOU_sumstats_new/logit_summary_monogen.txt")
+
+library(dplyr)
+
+clean_logit <- logit_sum %>%
+  filter(variable == "PRS") %>%              # keep only PRS rows
+  mutate(coef_se = sprintf("%.4f (%.4f)", coef, std_err)) %>%  # format coef(SE)
+  select(phenotype, variable, coef_se, p_value) %>%            # drop z_stat
+  arrange(p_value)                                             # sort smallest to largest
+fwrite(clean_logit, "monogen_AOU_clean_logit.txt", sep="\t")
+
+
+##### individ data table
+
+#####
+sumstab <- fread("/Users/jakemann/Documents/MonogenLiveR/AOU_sumstats_new/monogen_summary_df.txt")
+
+
+library(data.table)
+
+dt <- copy(sumtab)
+
+# ------------------------------
+# 1. Create N (% male) row
+# ------------------------------
+n_row <- data.table(
+  Trait = "N (% male)",
+  All = sprintf("%d (%.1f%%)", dt$All_total[1], 
+                sum(dt$Q1_male_count[1], dt$Q2_male_count[1], dt$Q3_male_count[1], dt$Q4_male_count[1]) /
+                dt$All_total[1] * 100),
+
+  Q1 = sprintf("%d (%.1f%%)", dt$Q1_total[1], dt$Q1_male_count[1] / dt$Q1_total[1] * 100),
+  Q2 = sprintf("%d (%.1f%%)", dt$Q2_total[1], dt$Q2_male_count[1] / dt$Q2_total[1] * 100),
+  Q3 = sprintf("%d (%.1f%%)", dt$Q3_total[1], dt$Q3_male_count[1] / dt$Q3_total[1] * 100),
+  Q4 = sprintf("%d (%.1f%%)", dt$Q4_total[1], dt$Q4_male_count[1] / dt$Q4_total[1] * 100),
+
+  p_value = NA_real_
+)
+
+# ------------------------------
+# 2. Prepare quantitative rows
+# ------------------------------
+qt <- dt[Trait != "N (% male)"]
+
+# Compute All_mean and All_sd from quartile totals
+qt[, `:=`(
+  All_mean = (Q1_mean * Q1_total +
+              Q2_mean * Q2_total +
+              Q3_mean * Q3_total +
+              Q4_mean * Q4_total) / All_total,
+  All_sd = sqrt((Q1_sd^2 + Q2_sd^2 + Q3_sd^2 + Q4_sd^2) / 4)
+)]
+
+# Format mean (SD)
+format_ms <- function(m, s) sprintf("%.3f (%.3f)", m, s)
+
+qt[, All := format_ms(All_mean, All_sd)]
+qt[, Q1 := format_ms(Q1_mean, Q1_sd)]
+qt[, Q2 := format_ms(Q2_mean, Q2_sd)]
+qt[, Q3 := format_ms(Q3_mean, Q3_sd)]
+qt[, Q4 := format_ms(Q4_mean, Q4_sd)]
+
+qt <- qt[, .(Trait, All, Q1, Q2, Q3, Q4, p_value)]
+
+# ------------------------------
+# 3. Bind N(% male) on top
+# ------------------------------
+final_table <- rbind(n_row, qt, fill = TRUE)
+
+final_table
+
+fwrite(final_table, "monogen_AOU_indiv_tab.txt", sep="\t")
+
+
+
+
+
+
+
+
